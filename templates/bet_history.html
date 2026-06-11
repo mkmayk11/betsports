@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="background: #101c28; color: white; padding: 25px; border-radius: 8px; font-family: 'Segoe UI', sans-serif; max-width: 900px; margin: 20px auto;">
+    <h2 style="margin-top: 0; color: #00ff66;">📋 Meu Histórico de Apostas</h2>
+    <p style="color: #8fa3b7; font-size: 0.9em; margin-bottom: 25px;">Monitore seus palpites em andamento e realize o encerramento antecipado (Cash Out).</p>
+    <hr style="border-color: #203144; margin-bottom: 25px;">
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div style="background: #243b53; color: #ff9045; padding: 12px; border-radius: 4px; margin-bottom: 20px; border-left: 4px solid #ff9045;">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+        {% for bet in bets %}
+        <div style="background: #1a2c3f; border: 1px solid #243b53; border-radius: 6px; padding: 20px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #203144; padding-bottom: 12px; margin-bottom: 15px;">
+                <div>
+                    <span style="font-size: 0.85em; color: #8fa3b7;">Identificador do Bilhete:</span>
+                    <strong style="color: #cbd5e1; font-size: 1.1em;">#{{ bet.id }}</strong>
+                </div>
+                <div>
+                    <span style="padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold;
+                        {% if bet.status == 'Pendente' %}background: #ffeeba; color: #856404;
+                        {% elif bet.status == 'Ganhou' %}background: #d4edda; color: #155724;
+                        {% elif bet.status == 'Cashout' %}background: #cce5ff; color: #004085;
+                        {% else %}background: #f8d7da; color: #721c24;{% endif %}">
+                        {{ bet.status }}
+                    </span>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <span style="font-size: 0.8em; color: #8fa3b7; display: block; margin-bottom: 8px;">Palpites Selecionados:</span>
+                {% for odd in bet.odds %}
+                <div style="background: #0b141c; padding: 10px; border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="color: #fff;">⚽ {{ odd.game.title }}</span>
+                        {% if odd.game.status == 'Ao Vivo' %}
+                            <span style="color: #00ff66; font-size: 0.85em; margin-left: 10px; font-weight: bold;">● Ao Vivo</span>
+                        {% elif odd.game.status == 'Trancada' %}
+                            <span style="color: #db2777; font-size: 0.85em; margin-left: 10px; font-weight: bold;">🔒 Suspenso</span>
+                        {% else %}
+                            <span style="color: #8fa3b7; font-size: 0.85em; margin-left: 10px;">⏱️ Pré-Jogo</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        Mercado: <strong style="color: #ff9045;">{{ odd.description }}</strong> 
+                        <span style="background: #243b53; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; color: #00ff66; margin-left: 5px;">@{{ "%.2f"|format(odd.multiplier) }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #142232; padding: 12px; border-radius: 4px;">
+                <div style="font-size: 0.9em; color: #cbd5e1;">
+                    Valor Apostado: <strong style="color: white;">R$ {{ "%.2f"|format(bet.amount) }}</strong> | 
+                    Multiplicador Total: <strong style="color: white;">x{{ "%.2f"|format(bet.total_multiplier) }}</strong>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 0.8em; color: #8fa3b7; display: block;">Retorno Potencial Máximo:</span>
+                    <strong style="color: #00ff66; font-size: 1.2em;">R$ {{ "%.2f"|format(bet.potential_win) }}</strong>
+                </div>
+            </div>
+
+            {% if bet.status == 'Pendente' %}
+                <div style="margin-top: 15px; border-top: 1px dashed #203144; padding-top: 15px; display: flex; justify-content: flex-end;">
+                    {% set live_proposal = bet.calculate_live_cashout() %}
+                    
+                    {% if live_proposal and live_proposal > 0 %}
+                        <form action="{{ url_for('cashout', bet_id=bet.id) }}" method="POST" style="margin: 0;">
+                            <button type="submit" 
+                                    style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.9em; transition: background 0.2s;"
+                                    onmouseover="this.style.background='#0056b3'" 
+                                    onmouseout="this.style.background='#007bff'">
+                                💰 Encerrar Bilhete (Cash Out: R$ {{ "%.2f"|format(live_proposal) }})
+                            </button>
+                        </form>
+                    {% else %}
+                        <button type="button" disabled 
+                                style="background: #243b53; color: #8fa3b7; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; font-size: 0.9em; cursor: not-allowed;">
+                            🔒 Cash Out Indisponível
+                        </button>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+        </div>
+        {% else %}
+        <div style="background: #1a2c3f; text-align: center; padding: 40px; border-radius: 6px; color: #8fa3b7; border: 1px dashed #243b53;">
+            Você ainda não realizou nenhuma aposta no sistema.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

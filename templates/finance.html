@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="display: flex; gap: 20px;">
+    
+    <div class="card" style="flex: 1;">
+        <h3>Solicitar Transação</h3>
+        <p>Seu saldo atual: <strong>R$ {{ "%.2f"|format(current_user.balance) }}</strong></p>
+        
+        <form method="POST">
+            <label>Tipo de Transação</label>
+            <select name="type" required>
+                <option value="Deposito">Depósito</option>
+                <option value="Saque">Saque</option>
+            </select>
+            
+            <label>Valor (R$)</label>
+            <input type="number" name="amount" step="0.01" min="1" required>
+            
+            <button type="submit" class="btn-orange">Enviar para Análise</button>
+        </form>
+        <p style="font-size: 0.85em; color: #666; margin-top: 10px;">Todas as solicitações passam por aprovação do administrador.</p>
+    </div>
+
+    <div class="card" style="flex: 2;">
+        <h3>Histórico Financeiro</h3>
+        {% if transactions %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in transactions %}
+                <tr>
+                    <td>{{ t.date.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td>{{ t.type }}</td>
+                    <td>R$ {{ "%.2f"|format(t.amount) }}</td>
+                    <td>
+                        {% if t.status == 'Pendente' %}
+                            <span style="color: orange;">Pendente</span>
+                        {% elif t.status == 'Aprovado' %}
+                            <span style="color: green;">Aprovado</span>
+                        {% else %}
+                            <span style="color: red;">Recusado</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p>Nenhuma transação encontrada.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

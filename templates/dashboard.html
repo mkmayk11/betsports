@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="display: flex; gap: 25px; align-items: flex-start; font-family: 'Segoe UI', sans-serif; background: #0b141c; padding: 20px; border-radius: 12px;">
+    
+    <div style="flex: 3;">
+        <h2 style="color: white; margin-top: 0; font-weight: 700; display: flex; align-items: center; gap: 10px;">
+            <span style="background: #f47321; width: 6px; height: 24px; display: inline-block; border-radius: 2px;"></span>
+            Apostas Esportivas
+        </h2>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div style="background: #3d2424; color: #ff6b6b; padding: 12px; border-radius: 4px; margin-bottom: 20px; border-left: 4px solid #ff6b6b; font-size: 0.9em;">
+                        ⚠️ {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        {% if games %}
+            {% for game in games %}
+            <div style="background: #152434; border-radius: 8px; margin-bottom: 25px; overflow: hidden; border: 1px solid #203347; position: relative;">
+                
+                {% if game.status == 'Ao Vivo' %}
+                <div style="width: 100%; background: #203347; height: 4px; position: absolute; top: 0; left: 0; z-index: 10;">
+                    <div class="live-progress-bar" style="height: 100%; background: #00ff66; width: 0%;"></div>
+                </div>
+                {% endif %}
+
+                <div style="background: #0f1923; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #203347;">
+                    <div>
+                        <span style="color: white; font-weight: 600; font-size: 1.1em; margin-right: 10px;">⚽ {{ game.title }}</span>
+                        
+                        {% if game.status == 'Ao Vivo' %}
+                            <span class="badge-live">
+                                <span class="dot-live"></span> AO VIVO ({{ game.home_score }} x {{ game.away_score }})
+                            </span>
+                        {% elif game.status == 'Trancada' %}
+                            <span style="background: #db2777; color: white; font-size: 0.75em; padding: 3px 8px; border-radius: 4px; font-weight: bold;">🔒 MERCADO SUSPENSO</span>
+                        {% else %}
+                            <span style="background: #203347; color: #8fa3b7; font-size: 0.75em; padding: 3px 8px; border-radius: 4px; font-weight: bold;">PRÉ-JOGO</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div style="padding: 20px; position: relative;">
+                    {% if game.status == 'Trancada' %}
+                    <div style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(11,20,28,0.7); z-index: 5; display:flex; justify-content:center; align-items:center; border-radius:0 0 8px 8px;">
+                        <div style="background: #0f1923; color: #f47321; border: 1px solid #f47321; padding: 15px 30px; border-radius: 6px; font-weight: bold; font-size: 1.1em; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                            🔒 COTAÇÕES BLOQUEADAS MOMENTANEAMENTE
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div style="margin-bottom: 18px;">
+                        <span style="font-size: 0.75em; font-weight: bold; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">Resultado Final</span>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px;">
+                            {% for odd in game.odds if odd.description in ['Casa vence', 'Empate', 'Fora vence'] %}
+                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.title }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
+                                <span style="color: #8fa3b7;">{{ odd.description }}</span>
+                                <span style="color: #f47321; font-weight: 700;">{{ odd.multiplier }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 18px;">
+                        <span style="font-size: 0.75em; font-weight: bold; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">Gols (Mais / Menos)</span>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 6px;">
+                            {% for odd in game.odds if '+ ' in odd.description or '- ' in odd.description or odd.description == 'Sem gols' %}
+                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.title }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
+                                <span style="color: #8fa3b7;">{{ odd.description }}</span>
+                                <span style="color: #f47321; font-weight: 700;">{{ odd.multiplier }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <span style="font-size: 0.75em; font-weight: bold; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">Especiais da Partida</span>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px;">
+                            {% for odd in game.odds if odd.description in ['Gol de cabeça', 'Cartões', 'Expulsões'] %}
+                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.title }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
+                                <span style="color: #8fa3b7;">{{ odd.description }}</span>
+                                <span style="color: #f47321; font-weight: 700;">{{ odd.multiplier }}</span>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="background: #152434; padding: 40px; text-align: center; border-radius: 8px; color: #8fa3b7; border: 1px solid #203347;">Nenhum evento esportivo aberto nas últimas horas.</div>
+        {% endif %}
+    </div>
+
+    <div style="flex: 1.1; background: #152434; border-radius: 8px; color: white; border: 1px solid #203347; position: sticky; top: 20px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="background: #f47321; padding: 14px; font-weight: bold; font-size: 0.95em; display: flex; justify-content: space-between;">
+            <span>CUPOM DE APOSTAS</span>
+            <span id="badge-count" style="background: #152434; color: white; padding: 1px 7px; border-radius: 10px; font-size: 0.8em;">0</span>
+        </div>
+        
+        <form action="{{ url_for('dashboard') }}" method="POST" id="form-bet-gate" style="padding: 15px;">
+            <div id="hidden-inputs-area"></div>
+            <div id="wrapper-items" style="max-height: 250px; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">
+                <p id="label-empty" style="color: #8fa3b7; font-size: 0.85em; text-align: center; padding: 30px 5px; margin: 0;">Selecione cotações ao lado para criar sua múltipla.</p>
+            </div>
+            
+            <div style="border-top: 1px solid #203347; padding-top: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                    <span style="color: #8fa3b7; font-size: 0.9em;">Multiplicador Total:</span>
+                    <strong id="total-factor" style="color: #f47321; font-size: 1.2em;">1.00x</strong>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 0.75em; color: #8fa3b7; display: block; margin-bottom: 4px; font-weight: bold;">VALOR DO PALPITE (R$)</label>
+                    <input type="number" id="input-wager" name="amount" placeholder="0.00" step="0.01" min="0.50" required style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #203347; background: #0b141c; color: white; font-weight: bold; font-size: 1.1em; box-sizing: border-box;" oninput="runRecalculate()">
+                </div>
+                <div style="background: #0b141c; padding: 12px; border-radius: 4px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #203347;">
+                    <span style="color: #8fa3b7; font-size: 0.8em;">Retorno Estimado:</span>
+                    <strong id="view-profit" style="color: #00ff66; font-size: 1.15em;">R$ 0,00</strong>
+                </div>
+                <button type="submit" style="width: 100%; background: #00ff66; color: #0b141c; border: none; padding: 12px; font-weight: bold; font-size: 1em; border-radius: 4px; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">CRAVAR BILHETE</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .odd-item-box { background: #0f1923; border: 1px solid #203347; border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s; font-size: 0.85em; width: 100%; }
+    .odd-item-box:hover:not(:disabled) { border-color: #f47321; background: #172635; }
+    .odd-item-box.selected-odd { background: #f47321 !important; border-color: #f47321 !important; }
+    .odd-item-box.selected-odd span { color: white !important; }
+    
+    /* Distintivo dinâmico e interativo para jogos em Live */
+    .badge-live {
+        background: #dc3545; color: white; padding: 3px 8px; border-radius: 4px; 
+        font-size: 0.75em; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;
+        animation: pulseLive 1.8s infinite ease-in-out;
+    }
+    .dot-live {
+        width: 6px; height: 6px; background: white; border-radius: 50%; display: inline-block;
+    }
+    
+    @keyframes pulseLive {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    @keyframes moveProgress { 0% { width: 0%; } 50% { width: 55%; } 100% { width: 98%; } }
+    .live-progress-bar { animation: moveProgress 120s linear infinite; }
+    .coupon-card { background: #0f1923; padding: 10px; border-radius: 4px; position: relative; border-left: 3px solid #f47321; }
+</style>
+
+<script>
+    let currentSlip = {};
+    function toggleOdd(id, title, desc, mult) {
+        const btn = document.getElementById(`btn-odd-${id}`);
+        mult = parseFloat(mult);
+        if(currentSlip[id]) {
+            delete currentSlip[id];
+            btn.classList.remove('selected-odd');
+        } else {
+            currentSlip[id] = { title, desc, mult };
+            btn.classList.add('selected-odd');
+        }
+        buildSlip();
+    }
+    function buildSlip() {
+        const wrap = document.getElementById('wrapper-items');
+        const hdn = document.getElementById('hidden-inputs-area');
+        const empty = document.getElementById('label-empty');
+        const badge = document.getElementById('badge-count');
+        const totalVw = document.getElementById('total-factor');
+        
+        wrap.innerHTML = ''; hdn.innerHTML = '';
+        const keys = Object.keys(currentSlip);
+        badge.innerText = keys.length;
+
+        if(keys.length === 0) {
+            wrap.appendChild(empty); totalVw.innerText = '1.00x';
+            totalVw.setAttribute('data-m', '1.0'); runRecalculate(); return;
+        }
+        let multTotal = 1.0;
+        keys.forEach(id => {
+            const item = currentSlip[id]; multTotal *= item.mult;
+            const div = document.createElement('div'); div.className = 'coupon-card';
+            div.innerHTML = `
+                <div style="font-size:0.85em; font-weight:bold; color:white;">${item.title}</div>
+                <div style="font-size:0.75em; color:#8fa3b7;">${item.desc}</div>
+                <div style="font-size:0.8em; color:#f47321; font-weight:bold; margin-top:2px;">@ ${item.mult.toFixed(2)}</div>
+            `;
+            wrap.appendChild(div);
+            
+            const input = document.createElement('input'); 
+            input.type = 'hidden'; 
+            input.name = 'odds'; 
+            input.value = id;
+            hdn.appendChild(input);
+        });
+        totalVw.innerText = multTotal.toFixed(2) + 'x';
+        totalVw.setAttribute('data-m', multTotal.toString());
+        runRecalculate();
+    }
+    function runRecalculate() {
+        const wager = parseFloat(document.getElementById('input-wager').value) || 0;
+        const m = parseFloat(document.getElementById('total-factor').getAttribute('data-m')) || 1.0;
+        document.getElementById('view-profit').innerText = wager > 0 && Object.keys(currentSlip).length > 0 ? 'R$ ' + (wager * m).toFixed(2) : 'R$ 0,00';
+    }
+</script>
+{% endblock %}

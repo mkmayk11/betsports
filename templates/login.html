@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 60px auto; background: #152434; padding: 30px; border-radius: 8px; border: 1px solid #203347; font-family: 'Segoe UI', sans-serif; color: white;">
+    <h3 style="margin-top: 0; text-align: center; color: #f47321;">Entrar no Betsports</h3>
+    
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div style="background: #dc3545; color: white; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 0.9em; text-align: center;">
+                    ⚠️ {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; font-size: 0.85em; color: #8fa3b7; margin-bottom: 5px;">Usuário</label>
+            <input type="text" name="username" required style="width: 100%; padding: 10px; background: #0b141c; border: 1px solid #203347; border-radius: 4px; color: white; box-sizing: border-box;">
+        </div>
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 0.85em; color: #8fa3b7; margin-bottom: 5px;">Senha</label>
+            <input type="password" name="password" required style="width: 100%; padding: 10px; background: #0b141c; border: 1px solid #203347; border-radius: 4px; color: white; box-sizing: border-box;">
+        </div>
+        <button type="submit" style="width: 100%; background: #f47321; color: white; border: none; padding: 12px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 1em;">ACESSAR CONTA</button>
+    </form>
+    
+    <p style="text-align: center; font-size: 0.85em; color: #8fa3b7; margin-top: 20px;">
+        Não tem uma conta? <a href="{{ url_for('register') }}" style="color: #f47321; text-decoration: none; font-weight: bold;">Cadastre-se aqui</a>
+    </p>
+</div>
+{% endblock %}

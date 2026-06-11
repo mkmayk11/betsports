@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Betsports</title>
+    <style>
+        :root {
+            --primary-orange: #FF6B00;
+            --secondary-orange: #FF8533;
+            --pure-white: #FFFFFF;
+            --bg-color: #F4F4F9;
+            --text-dark: #333333;
+            --border-color: #E0E0E0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+        }
+
+        .header {
+            background-color: var(--primary-orange);
+            color: var(--pure-white);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .header a {
+            color: var(--pure-white);
+            text-decoration: none;
+            margin-left: 20px;
+            font-weight: bold;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background-color: var(--pure-white);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            border-top: 4px solid var(--primary-orange);
+        }
+
+        .btn-orange {
+            background-color: var(--primary-orange);
+            color: var(--pure-white);
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+
+        .btn-orange:hover {
+            background-color: var(--secondary-orange);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        table, th, td {
+            border: 1px solid var(--border-color);
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f9f9f9;
+        }
+
+        input, select {
+            padding: 10px;
+            margin: 5px 0 15px 0;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .flash-messages {
+            background-color: #ffe8d6;
+            color: var(--primary-orange);
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--primary-orange);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>Betsports</h2>
+        <div>
+            {% if current_user.is_authenticated %}
+                <span>Saldo: R$ {{ "%.2f"|format(current_user.balance) }}</span>
+                {% if current_user.is_admin %}
+                    <a href="{{ url_for('admin_dashboard') }}">Painel Admin</a>
+                {% else %}
+                    <a href="{{ url_for('dashboard') }}">Jogos</a>
+                    <a href="{{ url_for('bet_history') }}">Minhas Apostas</a>
+                    <a href="{{ url_for('finance') }}">Financeiro</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Sair</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <p style="margin: 0;">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+</body>
+</html>
