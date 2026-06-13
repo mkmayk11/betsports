@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div style="background: #101c28; color: white; padding: 25px; border-radius: 8px; font-family: 'Segoe UI', sans-serif; max-width: 1300px; margin: 20px auto;">
+<div style="background: #101c28; color: white; padding: 15px; border-radius: 8px; font-family: 'Segoe UI', sans-serif; max-width: 1300px; margin: 10px auto;">
     
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0; color: #f47321;">Painel Administrativo Real-Time</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+        <h2 style="margin: 0; color: #f47321; font-size: 1.5em;">Painel Administrativo Real-Time</h2>
         <span style="background: #203144; padding: 6px 12px; border-radius: 4px; color: #8fa3b7; font-size: 0.85em; font-weight: bold;">📍 Gestão Live Avançada</span>
     </div>
     <hr style="border-color: #203144; margin-bottom: 25px;">
@@ -19,18 +19,18 @@
         {% endif %}
     {% endwith %}
 
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px; margin-bottom: 35px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 35px;">
         
         <div style="background: #1a2c3f; padding: 20px; border-radius: 6px; border: 1px solid #243b53;">
             <h3 style="margin-top: 0; color: #8fa3b7; font-size: 1.1em; margin-bottom: 15px;">➕ Criar Jogo com Odd Customizada</h3>
             <form action="{{ url_for('create_game') }}" method="POST" style="display: flex; flex-direction: column; gap: 10px;">
                 <input type="text" name="title" placeholder="Ex: Corinthians vs Real Madrid" required 
-                       style="background: #0b141c; color: white; border: 1px solid #243b53; padding: 10px; border-radius: 4px; outline: none;">
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <label style="font-size: 0.85em; color: #cbd5e1; min-width: 130px;">Valor Inicial Odds:</label>
+                       style="background: #0b141c; color: white; border: 1px solid #243b53; padding: 12px; border-radius: 4px; outline: none; font-size: 1em;">
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <label style="font-size: 0.85em; color: #cbd5e1; min-width: 120px;">Valor Inicial Odds:</label>
                     <input type="number" name="initial_multiplier" value="2.00" step="0.01" min="1.01"
-                           style="background: #0b141c; color: #00ff66; border: 1px solid #243b53; padding: 8px; border-radius: 4px; width: 90px; text-align: center; font-weight: bold;">
-                    <button type="submit" style="background: #00ff66; color: #0b141c; border: none; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; flex-grow: 1;">Criar Partida</button>
+                           style="background: #0b141c; color: #00ff66; border: 1px solid #243b53; padding: 10px; border-radius: 4px; width: 90px; text-align: center; font-weight: bold; font-size: 1em;">
+                    <button type="submit" style="background: #00ff66; color: #0b141c; border: none; padding: 12px; border-radius: 4px; font-weight: bold; cursor: pointer; flex-grow: 1; font-size: 1em;">Criar Partida</button>
                 </div>
             </form>
         </div>
@@ -39,17 +39,17 @@
             <h3 style="margin-top: 0; color: #00ff66; font-size: 1.1em; margin-bottom: 15px;">💰 Depósitos Pendentes</h3>
             <div style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
                 {% for tx in pending_transactions %}
-                <div style="background: #0b141c; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="background: #0b141c; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                     <div>
                         <span style="color: #cbd5e1; font-size: 0.9em; font-weight: bold;">{{ tx.user.username }}</span>
                         <span style="color: #00ff66; font-weight: bold; margin-left: 10px;">R$ {{ "%.2f"|format(tx.amount) }}</span>
                     </div>
                     <div style="display: flex; gap: 6px;">
                         <form action="{{ url_for('approve_transaction', tx_id=tx.id) }}" method="POST" style="margin: 0;">
-                            <button type="submit" style="background: #28a745; color: white; border: none; padding: 4px 10px; border-radius: 3px; font-size: 0.8em; font-weight: bold; cursor: pointer;">Aprovar</button>
+                            <button type="submit" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 3px; font-size: 0.8em; font-weight: bold; cursor: pointer;">Aprovar</button>
                         </form>
                         <form action="{{ url_for('reject_transaction', tx_id=tx.id) }}" method="POST" style="margin: 0;">
-                            <button type="submit" style="background: #dc3545; color: white; border: none; padding: 4px 10px; border-radius: 3px; font-size: 0.8em; font-weight: bold; cursor: pointer;">Recusar</button>
+                            <button type="submit" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 3px; font-size: 0.8em; font-weight: bold; cursor: pointer;">Recusar</button>
                         </form>
                     </div>
                 </div>
@@ -61,13 +61,20 @@
     </div>
 
     <h3 style="color: #8fa3b7; margin-bottom: 15px; font-size: 1.2em;">⚽ Painel do Confronto Live</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px; margin-bottom: 40px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 40px;">
         {% for game in games %}
         <div style="background: #1a2c3f; padding: 18px; border-radius: 6px; border: 1px solid #243b53; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #243b53; padding-bottom: 8px;">
-                    <span style="font-weight: bold; color: #fff;">{{ game.title }}</span>
-                    <span style="padding: 3px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold;
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #243b53; padding-bottom: 8px; gap: 10px;">
+                    <div style="display: flex; flex-direction: column; max-width: 70%;">
+                        <span style="font-weight: bold; color: #fff; font-size: 1em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ game.title }}</span>
+                        {% if game.status == 'Ao Vivo' %}
+                        <span style="font-size: 0.75em; color: #ff453a; font-weight: bold; margin-top: 2px;">
+                            ⏱️ {{ game.period if game.period else '1º Tempo' }} - {{ "%02d"|format(game.get_current_time()[0] if game.get_current_time else 0) }}:{{ "%02d"|format(game.get_current_time()[1] if game.get_current_time else 0) }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <span style="padding: 3px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; white-space: nowrap;
                         {% if game.status == 'Ao Vivo' %}background: #dc3545; color: white;
                         {% elif game.status == 'Aberta' %}background: #28a745; color: white;
                         {% elif game.status == 'Trancada' %}background: #ffc107; color: #0b141c;
@@ -76,16 +83,110 @@
                     </span>
                 </div>
 
-                <form action="{{ url_for('update_game_score', game_id=game.id) }}" method="POST" style="background: #0b141c; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                    <div style="display: flex; justify-content: center; align-items: center; gap: 8px;">
-                        <input type="number" name="home_score" value="{{ game.home_score }}" min="0" style="width: 45px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 4px; text-align: center; font-weight: bold; border-radius: 4px;">
-                        <strong style="color: #8fa3b7; font-size: 0.85em;">CASA X FORA</strong>
-                        <input type="number" name="away_score" value="{{ game.away_score }}" min="0" style="width: 45px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 4px; text-align: center; font-weight: bold; border-radius: 4px;">
-                        <button type="submit" style="background: #00ff66; color: #0b141c; border: none; padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 0.8em; cursor: pointer;">Mudar Placar</button>
+                <form action="{{ url_for('update_game_score', game_id=game.id) }}" method="POST" style="background: #0b141c; padding: 12px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #203144;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px;">
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.75em; color: #8fa3b7; display: block; margin-bottom: 4px; font-weight: bold;">Gols Casa</label>
+                            <input type="number" name="home_score" value="{{ game.home_score }}" min="0" style="width: 100%; max-width: 65px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 6px; text-align: center; font-weight: bold; border-radius: 4px; font-size: 1.1em;">
+                        </div>
+                        <div style="color: #4a5d6e; font-weight: bold; font-size: 0.8em; margin-top: 18px;">X</div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.75em; color: #8fa3b7; display: block; margin-bottom: 4px; font-weight: bold;">Gols Fora</label>
+                            <input type="number" name="away_score" value="{{ game.away_score }}" min="0" style="width: 100%; max-width: 65px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 6px; text-align: center; font-weight: bold; border-radius: 4px; font-size: 1.1em;">
+                        </div>
                     </div>
+
+                    <div style="display: flex; justify-content: space-between; gap: 6px; margin-bottom: 12px; border-top: 1px dashed #203144; padding-top: 10px;">
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #cbd5e1; display: block; margin-bottom: 3px; white-space: nowrap;">⚽ Cabeça C.</label>
+                            <input type="number" name="home_headers" value="{{ game.home_headers if game.home_headers is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #cbd5e1; display: block; margin-bottom: 3px; white-space: nowrap;">⚽ Cabeça F.</label>
+                            <input type="number" name="away_headers" value="{{ game.away_headers if game.away_headers is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #ffc107; display: block; margin-bottom: 3px; white-space: nowrap;">🟨 Cartão C.</label>
+                            <input type="number" name="home_cards" value="{{ game.home_cards if game.home_cards is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #ffc107; display: block; margin-bottom: 3px; white-space: nowrap;">🟨 Cartão F.</label>
+                            <input type="number" name="away_cards" value="{{ game.away_cards if game.away_cards is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; gap: 6px; margin-bottom: 12px;">
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #cbd5e1; display: block; margin-bottom: 3px; white-space: nowrap;">🚩 Escant. C.</label>
+                            <input type="number" name="home_corners" value="{{ game.home_corners if game.home_corners is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #cbd5e1; display: block; margin-bottom: 3px; white-space: nowrap;">🚩 Escant. F.</label>
+                            <input type="number" name="away_corners" value="{{ game.away_corners if game.away_corners is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #00bfec; display: block; margin-bottom: 3px; white-space: nowrap;">🚲 Bike C.</label>
+                            <input type="number" name="home_bicycle_goals" value="{{ game.home_bicycle_goals if game.home_bicycle_goals is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #00bfec; display: block; margin-bottom: 3px; white-space: nowrap;">🚲 Bike F.</label>
+                            <input type="number" name="away_bicycle_goals" value="{{ game.away_bicycle_goals if game.away_bicycle_goals is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; gap: 6px; margin-bottom: 12px;">
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #00ff66; display: block; margin-bottom: 3px; white-space: nowrap;">🎯 Pên. C. C</label>
+                            <input type="number" name="home_penalties_scored" value="{{ game.home_penalties_scored if game.home_penalties_scored is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #00ff66; display: block; margin-bottom: 3px; white-space: nowrap;">🎯 Pên. C. F</label>
+                            <input type="number" name="away_penalties_scored" value="{{ game.away_penalties_scored if game.away_penalties_scored is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #dc3545; display: block; margin-bottom: 3px; white-space: nowrap;">❌ Pên. Er. C</label>
+                            <input type="number" name="home_penalties_missed" value="{{ game.home_penalties_missed if game.home_penalties_missed is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; text-align: center;">
+                            <label style="font-size: 0.65em; color: #dc3545; display: block; margin-bottom: 3px; white-space: nowrap;">❌ Pên. Er. F</label>
+                            <input type="number" name="away_penalties_missed" value="{{ game.away_penalties_missed if game.away_penalties_missed is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-start; gap: 6px; margin-bottom: 12px;">
+                        <div style="flex: 1; max-width: calc(25% - 5px); text-align: center;">
+                            <label style="font-size: 0.65em; color: #f47321; display: block; margin-bottom: 3px; white-space: nowrap;">⏱️ 1ºT G. C</label>
+                            <input type="number" name="home_first_half_goals" value="{{ game.home_first_half_goals if game.home_first_half_goals is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                        <div style="flex: 1; max-width: calc(25% - 5px); text-align: center;">
+                            <label style="font-size: 0.65em; color: #f47321; display: block; margin-bottom: 3px; white-space: nowrap;">⏱️ 1ºT G. F</label>
+                            <input type="number" name="away_first_half_goals" value="{{ game.away_first_half_goals if game.away_first_half_goals is not none else 0 }}" min="0" style="width: 100%; max-width: 48px; background: #1a2c3f; color: white; border: 1px solid #243b53; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.9em;">
+                        </div>
+                    </div>
+
+                    <button type="submit" style="width: 100%; background: #00ff66; color: #0b141c; border: none; padding: 8px; border-radius: 4px; font-weight: bold; font-size: 0.85em; cursor: pointer;">Atualizar Informações</button>
                 </form>
 
                 {% if game.status != 'Finalizado' %}
+                <div style="background: #0b141c; padding: 8px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #203144;">
+                    <span style="font-size: 0.72em; color: #8fa3b7; display: block; margin-bottom: 6px; font-weight: bold; text-align: center; letter-spacing: 0.5px;">⏱️ RELÓGIO EM LIVE</span>
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                        <form action="{{ url_for('control_timer', game_id=game.id, action='start') }}" method="POST" style="flex: 1; margin: 0;">
+                            <button type="submit" style="width: 100%; background: #28a745; color: white; border: none; padding: 5px 0; border-radius: 3px; font-size: 0.7em; font-weight: bold; cursor: pointer;">Iniciar</button>
+                        </form>
+                        <form action="{{ url_for('control_timer', game_id=game.id, action='pause') }}" method="POST" style="flex: 1; margin: 0;">
+                            <button type="submit" style="width: 100%; background: #ffc107; color: #0b141c; border: none; padding: 5px 0; border-radius: 3px; font-size: 0.7em; font-weight: bold; cursor: pointer;">Pausar</button>
+                        </form>
+                        <form action="{{ url_for('control_timer', game_id=game.id, action='next_period') }}" method="POST" style="flex: 1; margin: 0;">
+                            <button type="submit" style="width: 100%; background: #00bfec; color: white; border: none; padding: 5px 0; border-radius: 3px; font-size: 0.7em; font-weight: bold; cursor: pointer;">Próx. T.</button>
+                        </form>
+                        <form action="{{ url_for('control_timer', game_id=game.id, action='reset') }}" method="POST" style="flex: 1; margin: 0;">
+                            <button type="submit" style="width: 100%; background: #c53030; color: white; border: none; padding: 5px 0; border-radius: 3px; font-size: 0.7em; font-weight: bold; cursor: pointer;">Zerar</button>
+                        </form>
+                    </div>
+                </div>
+
                 <form action="{{ url_for('update_odds', game_id=game.id) }}" method="POST" style="margin-bottom: 15px;">
                     <span style="font-size: 0.75em; color: #8fa3b7; display: block; margin-bottom: 5px; font-weight: bold;">📈 VALOR DAS ODDS LIVE:</span>
                     <div style="max-height: 110px; overflow-y: auto; background: #0b141c; padding: 8px; border-radius: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
@@ -96,16 +197,16 @@
                         </div>
                         {% endfor %}
                     </div>
-                    <button type="submit" style="width: 100%; background: #00bfec; color: white; border: none; padding: 5px; margin-top: 5px; border-radius: 4px; font-weight: bold; font-size: 0.8em; cursor: pointer;">Atualizar Odds em Live</button>
+                    <button type="submit" style="width: 100%; background: #00bfec; color: white; border: none; padding: 6px; margin-top: 5px; border-radius: 4px; font-weight: bold; font-size: 0.8em; cursor: pointer;">Atualizar Odds em Live</button>
                 </form>
                 {% endif %}
             </div>
 
             <div>
                 <div style="display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap;">
-                    <a href="{{ url_for('change_status', game_id=game.id, new_status='Aberta') }}" style="flex: 1; text-align: center; background: #28a745; color: white; font-size: 0.7em; padding: 6px 0; border-radius: 3px; text-decoration: none; font-weight: bold;">Aberta</a>
-                    <a href="{{ url_for('change_status', game_id=game.id, new_status='Ao Vivo') }}" style="flex: 1; text-align: center; background: #dc3545; color: white; font-size: 0.7em; padding: 6px 0; border-radius: 3px; text-decoration: none; font-weight: bold;">● Ao Vivo</a>
-                    <a href="{{ url_for('change_status', game_id=game.id, new_status='Trancada') }}" style="flex: 1; text-align: center; background: #ffc107; color: #0b141c; font-size: 0.7em; padding: 6px 0; border-radius: 3px; text-decoration: none; font-weight: bold;">Trancar</a>
+                    <a href="{{ url_for('change_status', game_id=game.id, new_status='Aberta') }}" style="flex: 1; text-align: center; background: #28a745; color: white; font-size: 0.7em; padding: 8px 0; border-radius: 3px; text-decoration: none; font-weight: bold;">Aberta</a>
+                    <a href="{{ url_for('change_status', game_id=game.id, new_status='Ao Vivo') }}" style="flex: 1; text-align: center; background: #dc3545; color: white; font-size: 0.7em; padding: 8px 0; border-radius: 3px; text-decoration: none; font-weight: bold;">● Ao Vivo</a>
+                    <a href="{{ url_for('change_status', game_id=game.id, new_status='Trancada') }}" style="flex: 1; text-align: center; background: #ffc107; color: #0b141c; font-size: 0.7em; padding: 8px 0; border-radius: 3px; text-decoration: none; font-weight: bold;">Trancar</a>
                 </div>
 
                 {% if game.status != 'Finalizado' %}
@@ -122,13 +223,13 @@
                         </button>
                         {% endfor %}
                     </div>
-                    <button type="submit" style="width: 100%; background: #e0a800; color: #0b141c; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.8em;">Liquidar e Finalizar</button>
+                    <button type="submit" style="width: 100%; background: #e0a800; color: #0b141c; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85em;">Liquidar e Finalizar</button>
                 </form>
                 {% else %}
                 <div style="display: flex; flex-direction: column; gap: 5px;">
                     <div style="background: #203144; text-align: center; padding: 6px; border-radius: 4px; color: #8fa3b7; font-size: 0.8em; font-weight: bold;">🏁 Partida Concluída</div>
                     <form action="{{ url_for('delete_game', game_id=game.id) }}" method="POST" onsubmit="return confirm('Deseja deletar permanentemente este jogo finalizado do banco?');" style="margin: 0;">
-                        <button type="submit" style="width: 100%; background: #c53030; color: white; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.8em;">🗑️ Excluir Jogo do Histórico</button>
+                        <button type="submit" style="width: 100%; background: #c53030; color: white; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.8em;">🗑️ Excluir Jogo do Histórico</button>
                     </form>
                 </div>
                 {% endif %}
@@ -138,7 +239,7 @@
     </div>
 
     <h3 style="color: #8fa3b7; margin-bottom: 15px; font-size: 1.2em;">📊 Monitor Geral de Bilhetes</h3>
-    <div style="background: #1a2c3f; border-radius: 6px; overflow: auto; border: 1px solid #243b53;">
+    <div style="background: #1a2c3f; border-radius: 6px; overflow-x: auto; border: 1px solid #243b53;">
         <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85em; min-width: 900px;">
             <thead>
                 <tr style="background: #0b141c; color: #8fa3b7; border-bottom: 2px solid #203144;">
@@ -221,7 +322,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const description = this.getAttribute('data-description');
             const targetUrl = `/admin/toggle_odd_winner/${oddId}`;
             
-            // Desabilita o clique temporariamente para evitar double-click
             this.disabled = true;
             this.style.opacity = '0.7';
 
@@ -238,13 +338,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (data.success) {
                     if (data.is_winner) {
-                        // Altera o visual do botão para Ativo (Verde)
                         this.style.background = "#28a745";
                         this.style.color = "white";
                         this.style.borderColor = "#28a745";
                         this.innerHTML = `✓ ${description}`;
                     } else {
-                        // Retorna o visual para Inativo (Azul-escuro original)
                         this.style.background = "#1a2c3f";
                         this.style.color = "#cbd5e1";
                         this.style.borderColor = "#243b53";
