@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecreto123'
 # Puxa o link do Neon na nuvem; se não achar, usa o SQLite local
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
+db_url = os.environ.get('DATABASE_URL', 'postgresql://neondb_owner:npg_meVRBsiA3D2U@ep-gentle-salad-adp0i6vu-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require')
 
 # Correção necessária: o SQLAlchemy exige que comece com 'postgresql://', 
 # mas algumas nuvens entregam como 'postgres://'
