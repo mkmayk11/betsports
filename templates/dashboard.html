@@ -30,17 +30,30 @@
                 {% endif %}
 
                 <div style="background: #0f1923; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #203347;">
-                    <div>
-                        <span style="color: white; font-weight: 600; font-size: 1.1em; margin-right: 10px;">⚽ {{ game.title }}</span>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <img src="{{ game.home_logo if game.home_logo else url_for('static', filename='img/default.png') }}" 
+                                 alt="Escudo {{ game.home_team }}" 
+                                 style="width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));">
+                            
+                            <span style="color: white; font-weight: 600; font-size: 1.1em;">{{ game.home_team }}</span>
+                            
+                            <span style="color: #64748b; font-weight: bold; font-size: 0.9em; padding: 0 4px;">x</span>
+                            
+                            <span style="color: white; font-weight: 600; font-size: 1.1em;">{{ game.away_team }}</span>
+                            
+                            <img src="{{ game.away_logo if game.away_logo else url_for('static', filename='img/default.png') }}" 
+                                 alt="Escudo {{ game.away_team }}" 
+                                 style="width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));">
+                        </div>
                         
                         {% if game.status == 'Ao Vivo' %}
-                            <span class="badge-live">
+                            <span class="badge-live" style="margin-left: 10px;">
                                 <span class="dot-live"></span> AO VIVO ({{ game.home_score }} x {{ game.away_score }})
                             </span>
                         {% elif game.status == 'Trancada' %}
-                            <span style="background: #db2777; color: white; font-size: 0.75em; padding: 3px 8px; border-radius: 4px; font-weight: bold;">🔒 MERCADO SUSPENSO</span>
-                        {% else %}
-                            <span style="background: #203347; color: #8fa3b7; font-size: 0.75em; padding: 3px 8px; border-radius: 4px; font-weight: bold;">PRÉ-JOGO</span>
+                            <span style="background: #db2777; color: white; font-size: 0.75em; padding: 3px 8px; border-radius: 4px; font-weight: bold; margin-left: 10px;">🔒 MERCADO SUSPENSO</span>
                         {% endif %}
                     </div>
                 </div>
@@ -54,11 +67,51 @@
                     </div>
                     {% endif %}
 
+                    {% if game.status == 'Ao Vivo' %}
+                    <div style="margin-bottom: 22px; display: flex; flex-direction: column; gap: 10px;">
+                        
+                        <div style="background: #1c2e42; border: 1px solid #2a415a; padding: 6px 12px; border-radius: 4px; font-size: 0.8em; font-weight: bold; color: #fff; display: inline-flex; align-items: center; gap: 8px; width: max-content;">
+                            <span style="height: 7px; width: 7px; background-color: #00ff66; border-radius: 50%; display: inline-block; animation: pulseLive 1s infinite;"></span>
+                            <span>{{ game.period if game.period else '1º Tempo' }}</span>
+                            <span style="color: #2a415a;">|</span>
+                            
+                            <span class="live-clock" style="color: #00ff66;">
+                                {% if game.get_current_time %}
+                                    {{ "%02d"|format(game.get_current_time()[0]) }}:{{ "%02d"|format(game.get_current_time()[1]) }}
+                                {% else %}
+                                    {{ game.current_time if game.current_time else '00:00' }}
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        <div style="background: #0f1923; border: 1px solid #203347; border-radius: 6px; padding: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; text-align: center;">
+                            <div style="border-right: 1px solid #203347; padding-right: 5px;">
+                                <div style="font-size: 0.7em; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">🚩 Escanteios</div>
+                                <div style="font-size: 1.05em; font-weight: bold; color: #fff; margin-top: 3px;">{{ game.home_corners if game.home_corners is not none else 0 }} x {{ game.away_corners if game.away_corners is not none else 0 }}</div>
+                            </div>
+                            <div style="border-right: 1px solid #203347; padding-right: 5px;">
+                                <div style="font-size: 0.7em; color: #ffc107; text-transform: uppercase; letter-spacing: 0.5px;">🟨 Cartões Amarelos</div>
+                                <div style="font-size: 1.05em; font-weight: bold; color: #ffc107; margin-top: 3px;">{{ game.home_cards if game.home_cards is not none else 0 }} x {{ game.away_cards if game.away_cards is not none else 0 }}</div>
+                            </div>
+                            <div style="border-right: 1px solid #203347; padding-right: 5px;">
+                                <div style="font-size: 0.7em; color: #cbd5e1; text-transform: uppercase; letter-spacing: 0.5px;">⚽ Gols Cabeça</div>
+                                <div style="font-size: 1.05em; font-weight: bold; color: #fff; margin-top: 3px;">{{ game.home_headers if game.home_headers is not none else 0 }} x {{ game.away_headers if game.away_headers is not none else 0 }}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.7em; color: #dc3545; text-transform: uppercase; letter-spacing: 0.5px;">🟥 Expulsões</div>
+                                <div style="font-size: 1.05em; font-weight: bold; color: #dc3545; margin-top: 3px;">
+                                    {{ game.home_expulsions if game.home_expulsions else 0 }} x {{ game.away_expulsions if game.away_expulsions else 0 }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div style="margin-bottom: 18px;">
                         <span style="font-size: 0.75em; font-weight: bold; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">Resultado Final</span>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px;">
                             {% for odd in game.odds if odd.description in ['Casa vence', 'Empate', 'Fora vence'] %}
-                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.title }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
+                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.home_team }} x {{ game.away_team }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
                                 <span style="color: #8fa3b7;">{{ odd.description }}</span>
                                 <span style="color: #f47321; font-weight: 700;">{{ odd.multiplier }}</span>
                             </button>
@@ -70,7 +123,7 @@
                         <span style="font-size: 0.75em; font-weight: bold; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">Gols (Mais / Menos)</span>
                         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 6px;">
                             {% for odd in game.odds if '+ ' in odd.description or '- ' in odd.description or odd.description == 'Sem gols' %}
-                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.title }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
+                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.home_team }} x {{ game.away_team }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
                                 <span style="color: #8fa3b7;">{{ odd.description }}</span>
                                 <span style="color: #f47321; font-weight: 700;">{{ odd.multiplier }}</span>
                             </button>
@@ -80,9 +133,9 @@
 
                     <div>
                         <span style="font-size: 0.75em; font-weight: bold; color: #8fa3b7; text-transform: uppercase; letter-spacing: 0.5px;">Especiais da Partida</span>
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px;">
-                            {% for odd in game.odds if odd.description in ['Gol de cabeça', 'Cartões', 'Expulsões'] %}
-                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.title }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 6px;">
+                            {% for odd in game.odds if 'cabeça' in odd.description.lower() or 'bicicleta' in odd.description.lower() or 'cartão' in odd.description.lower() or 'expuls' in odd.description.lower() %}
+                            <button type="button" class="odd-item-box" id="btn-odd-{{ odd.id }}" onclick="toggleOdd('{{ odd.id }}', '{{ game.home_team }} x {{ game.away_team }}', '{{ odd.description }}', '{{ odd.multiplier }}')" {% if game.status == 'Trancada' %}disabled{% endif %}>
                                 <span style="color: #8fa3b7;">{{ odd.description }}</span>
                                 <span style="color: #f47321; font-weight: 700;">{{ odd.multiplier }}</span>
                             </button>
@@ -134,15 +187,12 @@
     .odd-item-box.selected-odd { background: #f47321 !important; border-color: #f47321 !important; }
     .odd-item-box.selected-odd span { color: white !important; }
     
-    /* Distintivo dinâmico e interativo para jogos em Live */
     .badge-live {
         background: #dc3545; color: white; padding: 3px 8px; border-radius: 4px; 
         font-size: 0.75em; font-weight: bold; display: inline-flex; align-items: center; gap: 5px;
         animation: pulseLive 1.8s infinite ease-in-out;
     }
-    .dot-live {
-        width: 6px; height: 6px; background: white; border-radius: 50%; display: inline-block;
-    }
+    .dot-live { width: 6px; height: 6px; background: white; border-radius: 50%; display: inline-block; }
     
     @keyframes pulseLive {
         0% { opacity: 1; }
@@ -155,6 +205,28 @@
 </style>
 
 <script>
+    // Cronômetro local em tempo real
+    setInterval(() => {
+        document.querySelectorAll('.live-clock').forEach(clock => {
+            let timeParts = clock.innerText.trim().split(':');
+            if (timeParts.length === 2) {
+                let minutes = parseInt(timeParts[0], 10);
+                let seconds = parseInt(timeParts[1], 10);
+                
+                seconds++;
+                if (seconds >= 60) {
+                    seconds = 0;
+                    minutes++;
+                }
+                
+                let strMin = minutes < 10 ? '0' + minutes : minutes;
+                let strSec = seconds < 10 ? '0' + seconds : seconds;
+                
+                clock.innerText = strMin + ':' + strSec;
+            }
+        });
+    }, 1000);
+
     let currentSlip = {};
     function toggleOdd(id, title, desc, mult) {
         const btn = document.getElementById(`btn-odd-${id}`);
