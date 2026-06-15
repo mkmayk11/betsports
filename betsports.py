@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecreto123'
 # Puxa o link do Neon na nuvem; se não achar, usa o SQLite local
-db_url = os.environ.get('DATABASE_URL', 'postgresql://neondb_owner:npg_meVRBsiA3D2U@ep-gentle-salad-adp0i6vu-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require')
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
 
 # Correção necessária: o SQLAlchemy exige que comece com 'postgresql://', 
 # mas algumas nuvens entregam como 'postgres://'
@@ -24,10 +24,10 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 OPCOES_PADRAO = [
-    "casa vence", "empate", "fora vence",
+    "Casa vence", "Empate", "Fora vence",
     "+ de 0 gol","+ 1 gol", "+ 2 gols", "+ 3 gols", "+ 4 gols", "+ 5 gols",
     "- 1 gol", "- 2 gols", "- 3 gols", "- 4 gols", "- 5 gols",
-    "gol de cabeça", "sem gols", "+ 2 cartões", "expulsões","gol de bicicleta","+ 5 escanteios","+ 10 escanteios","- 10 escanteios","- 5 escanteios","gol de penalti","penalti perdido","gol no primeiro tempo","sem gol primeiro tempo","+ 0 gol no primeiro tempo","+ de 1 gol no primeiro tempo"]
+    "gol de cabeça", "sem gols", "+ 2 cartões", "expulsões","gol de bicicleta","+ 5 escanteios","+ 10 escanteios","- 10 escanteios","- 5 escanteios","gol de penalti","penalti perdido","gol no primeiro tempo","sem gol primeiro tempo","+ 0 gol no primeiro tempo","+ de 1 gol no primeiro tempo","ambos marcam - sim ","ambos marcam - nao"]
 
 # ================= MODELOS DE BANCO DE DADOS =================
 
@@ -39,7 +39,7 @@ bet_odds = db.Table('bet_odds',
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)
+    password = db.Column(db.String(150), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     balance = db.Column(db.Float, default=0.0)
     bets = db.relationship('Bet', backref='user', lazy=True)
@@ -341,11 +341,22 @@ def logout():
 def finance():
     if request.method == 'POST':
         amount = float(request.form.get('amount', 0))
-        if amount > 0:
-            new_tx = Transaction(user_id=current_user.id, amount=amount, type='Deposito', status='Pendente')
+        # Captura o valor exato que vem do seu <select name="type">
+        tx_type = request.form.get('type') 
+        
+        if amount > 0 and tx_type in ['Deposito', 'Saque']:
+            new_tx = Transaction(
+                user_id=current_user.id, 
+                amount=amount, 
+                type=tx_type, # Salva como 'Deposito' ou 'Saque'
+                status='Pendente'
+            )
             db.session.add(new_tx)
             db.session.commit()
-            flash('Solicitação de depósito enviada! Aguarde a aprovação do Admin.')
+            flash(f'Solicitação de {tx_type} enviada com sucesso!')
+        else:
+            flash('Erro: Valor inválido ou tipo de transação não selecionado.')
+            
     txs = Transaction.query.filter_by(user_id=current_user.id).order_by(Transaction.date.desc()).all()
     return render_template('finance.html', transactions=txs)
 
@@ -429,17 +440,16 @@ def cashout(bet_id):
 
 # ================= PAINEL ADMINISTRATIVO & LIQUIDAÇÃO =================
 
-@app.route('/admin/dashboard', methods=['GET', 'POST']) # 1. Permitimos GET e POST aqui
+@app.route('/admin/dashboard', methods=['GET', 'POST'])
 @login_required
 def admin_dashboard():
+    # Verifica se é admin
     if not current_user.is_admin:
         return redirect(url_for('dashboard'))
     
-    # --- SE O USUÁRIO CLICOU EM "CRIAR PARTIDA" (POST) ---
-    # --- SE O USUÁRIO CLICOU EM "CRIAR PARTIDA" (POST) ---
+    # --- LÓGICA DE POST (CRIAÇÃO DE PARTIDA) ---
     if request.method == 'POST':
         title_input = request.form.get('title') 
-        
         if title_input:
             if " x " in title_input.lower():
                 teams = title_input.split(' x ')
@@ -463,7 +473,6 @@ def admin_dashboard():
             home_logo = logos_database.get(home_team.lower(), "/static/img/default.png")
             away_logo = logos_database.get(away_team.lower(), "/static/img/default.png")
             
-            # CRIAR O JOGO (Sem a linha initial_odds)
             novo_jogo = Game(
                 title=title_input,
                 home_team=home_team,
@@ -474,9 +483,8 @@ def admin_dashboard():
             )
             
             db.session.add(novo_jogo)
-            db.session.commit() # Salvamos o jogo primeiro para gerar o ID dele
+            db.session.commit()
             
-            # LOOP AUTOMÁTICO: Cria as opções de apostas na tabela Odd linkadas a este jogo
             for opcao in OPCOES_PADRAO:
                 nova_odd = Odd(game_id=novo_jogo.id, description=opcao, multiplier=2.00)
                 db.session.add(nova_odd)
@@ -485,11 +493,54 @@ def admin_dashboard():
             flash("Partida e mercados criados com sucesso!")
             return redirect(url_for('admin_dashboard'))
 
+    # --- LÓGICA DE GET (EXIBIÇÃO DOS DADOS) ---
+    games = Game.query.order_by(Game.id.desc()).all()
+    all_bets = Bet.query.order_by(Bet.id.desc()).all()
+    
+    # --- TESTE DE DIAGNÓSTICO ---
+    # Vamos buscar apenas pelo tipo, sem filtrar pelo status, 
+    # e sem complicar com ilike no status por enquanto.
+    
+    pending_deposits = Transaction.query.filter(Transaction.type.ilike('%deposito%')).all()
+    pending_withdrawals = Transaction.query.filter(Transaction.type.ilike('%saque%')).all()
+
+    # LOG NO TERMINAL PARA DEBUGAR
+    print(f"DEBUG: Encontrei {len(pending_deposits)} depósitos no banco.")
+    for d in pending_deposits:
+        print(f"DEBUG: Depósito encontrado -> Tipo: '{d.type}', Status: '{d.status}'")
+    
+    # Junta tudo em uma única lista que o seu HTML já sabe como usar
+    todas_pendentes = Transaction.query.filter(Transaction.status == 'Pendente').all()
+    
+    return render_template(
+        'admin_dashboard.html', 
+        games=games, 
+        all_bets=all_bets, 
+        pending_transactions=todas_pendentes  # Mudei o nome aqui para bater com o HTML
+    )
+    
+    # Se você ainda não vir nada, verifique no seu DB Browser se o tipo está 
+    # exatamente 'deposito' (minúsculo) ou 'Deposito' (maiúsculo).
+    
+    return render_template(
+        'admin_dashboard.html', 
+        games=games, 
+        all_bets=all_bets, 
+        deposits=pending_deposits, 
+        withdrawals=pending_withdrawals
+    )
+
     # --- RENDERIZAÇÃO NORMAL DA PÁGINA (GET) ---
     games = Game.query.order_by(Game.id.desc()).all()
     pending_transactions = Transaction.query.filter_by(status='Pendente').all()
     all_bets = Bet.query.order_by(Bet.id.desc()).all()
-    return render_template('admin_dashboard.html', games=games, pending_transactions=pending_transactions, all_bets=all_bets)
+    
+    # 🌟 LINHAS ADICIONADAS SEM ALTERAR AS ANTERIORES: Separando depósitos e saques pendentes
+    pending_deposits = Transaction.query.filter_by(type='deposit', status='Pendente').all()
+    pending_withdrawals = Transaction.query.filter_by(type='withdraw', status='Pendente').all()
+    
+    # Retornando o template com as suas variáveis originais intactas + as novas tabelas separadas
+    return render_template('admin_dashboard.html', games=games, pending_transactions=pending_transactions, all_bets=all_bets, deposits=pending_deposits, withdrawals=pending_withdrawals)
 
 @app.route('/admin/update_game_progress/<int:game_id>', methods=['POST'])
 @login_required
@@ -826,12 +877,43 @@ def settle_game(game_id):
 @app.route('/admin/approve_transaction/<int:tx_id>', methods=['POST'])
 @login_required
 def approve_transaction(tx_id):
-    if not current_user.is_admin: return redirect(url_for('dashboard'))
+    if not current_user.is_admin: 
+        return redirect(url_for('dashboard'))
+        
     tx = db.session.get(Transaction, tx_id)
-    if tx and tx.status == 'Pendente':
-        tx.status = 'Aprovado'
+    
+    if not tx:
+        flash("Transação não encontrada.")
+        return redirect(url_for('admin_dashboard'))
+
+    if tx.status != 'Pendente':
+        flash("Esta transação já foi processada.")
+        return redirect(url_for('admin_dashboard'))
+
+    # Normalizamos o tipo para garantir a comparação
+    tipo = str(tx.type).strip().capitalize()
+
+    # Lógica de Depósito
+    if tipo == 'Deposito':
         tx.user.balance += tx.amount
-        db.session.commit()
+        tx.status = 'Aprovado'
+        flash(f"Depósito de R$ {tx.amount:.2f} aprovado com sucesso!")
+            
+    # Lógica de Saque
+    elif tipo == 'Saque':
+        if tx.user.balance >= tx.amount:
+            tx.user.balance -= tx.amount
+            tx.status = 'Aprovado'
+            flash(f"Saque de R$ {tx.amount:.2f} aprovado com sucesso!")
+        else:
+            flash(f"Erro: Usuário não tem saldo suficiente para este saque!")
+            return redirect(url_for('admin_dashboard'))
+    
+    else:
+        flash(f"Erro: Tipo de transação desconhecido ('{tipo}').")
+        return redirect(url_for('admin_dashboard'))
+                
+    db.session.commit()
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/reject_transaction/<int:tx_id>', methods=['POST'])
