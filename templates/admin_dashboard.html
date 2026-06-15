@@ -1,6 +1,8 @@
 {% extends 'base.html' %}
 
 {% block content %}
+
+
 <div style="background: #101c28; color: white; padding: 15px; border-radius: 8px; font-family: 'Segoe UI', sans-serif; max-width: 1300px; margin: 10px auto;">
     
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
@@ -38,7 +40,7 @@
         <div style="background: #1a2c3f; padding: 20px; border-radius: 6px; border: 1px solid #243b53;">
             <h3 style="margin-top: 0; color: #00ff66; font-size: 1.1em; margin-bottom: 15px;">💰 Depósitos Pendentes</h3>
             <div style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-                {% for tx in pending_transactions %}
+                {% for tx in pending_transactions if tx.type == 'Deposito' %}
                 <div style="background: #0b141c; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
                     <div>
                         <span style="color: #cbd5e1; font-size: 0.9em; font-weight: bold;">{{ tx.user.username }}</span>
@@ -55,6 +57,30 @@
                 </div>
                 {% else %}
                 <div style="color: #8fa3b7; text-align: center; font-size: 0.9em; padding-top: 20px;">Nenhum depósito pendente.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div style="background: #1a2c3f; padding: 20px; border-radius: 6px; border: 1px solid #243b53;">
+            <h3 style="margin-top: 0; color: #ff9045; font-size: 1.1em; margin-bottom: 15px;">💸 Saques Pendentes</h3>
+            <div style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                {% for tx in pending_transactions if tx.type == 'Saque' %}
+                <div style="background: #0b141c; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                    <div>
+                        <span style="color: #cbd5e1; font-size: 0.9em; font-weight: bold;">{{ tx.user.username }}</span>
+                        <span style="color: #ff9045; font-weight: bold; margin-left: 10px;">R$ {{ "%.2f"|format(tx.amount) }}</span>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <form action="{{ url_for('approve_transaction', tx_id=tx.id) }}" method="POST" style="margin: 0;">
+                            <button type="submit" style="background: #28a745; color: white; border: none; padding: 6px 10px; border-radius: 3px; font-size: 0.8em; font-weight: bold; cursor: pointer;">Pagar</button>
+                        </form>
+                        <form action="{{ url_for('reject_transaction', tx_id=tx.id) }}" method="POST" style="margin: 0;">
+                            <button type="submit" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 3px; font-size: 0.8em; font-weight: bold; cursor: pointer;">Recusar</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div style="color: #8fa3b7; text-align: center; font-size: 0.9em; padding-top: 20px;">Nenhum saque pendente.</div>
                 {% endfor %}
             </div>
         </div>
@@ -221,6 +247,7 @@
                                 style="flex: 1 1 calc(50% - 6px); min-width: 100px; text-align: center; background: {% if odd.is_winner %}#28a745{% else %}#1a2c3f{% endif %}; color: {% if odd.is_winner %}white{% else %}#cbd5e1{% endif %}; border: 1px solid {% if odd.is_winner %}#28a745{% else %}#243b53{% endif %}; font-size: 0.75em; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: all 0.2s;">
                             {% if odd.is_winner %}✓ {% endif %}{{ odd.description }}
                         </button>
+                        <input type="hidden" name="odd_winner_{{ odd.id }}" id="input-winner-{{ odd.id }}" value="{{ 'true' if odd.is_winner else 'false' }}">
                         {% endfor %}
                     </div>
                     <button type="submit" style="width: 100%; background: #e0a800; color: #0b141c; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85em;">Liquidar e Finalizar</button>
@@ -321,6 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const oddId = this.getAttribute('data-odd-id');
             const description = this.getAttribute('data-description');
             const targetUrl = `/admin/toggle_odd_winner/${oddId}`;
+            const hiddenInput = document.getElementById(`input-winner-${oddId}`);
             
             this.disabled = true;
             this.style.opacity = '0.7';
@@ -337,6 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.style.opacity = '1';
                 
                 if (data.success) {
+                    hiddenInput.value = data.is_winner;
                     if (data.is_winner) {
                         this.style.background = "#28a745";
                         this.style.color = "white";
