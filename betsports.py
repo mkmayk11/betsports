@@ -9,10 +9,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecreto123'
 # Puxa o link do Neon na nuvem; se não achar, usa o SQLite local
-db_url = os.environ.get('DATABASE_URL', 'postgresql://neondb_owner:npg_meVRBsiA3D2U@ep-gentle-salad-adp0i6vu-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require')
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
 
 # Correção necessária: o SQLAlchemy exige que comece com 'postgresql://', 
-# mas algumas nuvens entregam como 'postgres://'
+# mas algumas nuvens entregam como 'postgres://'postgresql://neondb_owner:npg_meVRBsiA3D2U@ep-gentle-salad-adp0i6vu-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
@@ -179,77 +179,69 @@ class Bet(db.Model):
     odds = db.relationship('Odd', secondary=bet_odds, backref=db.backref('bets', lazy=True))
 
     def calculate_live_cashout(self):
-        """Calcula o Cash Out dinâmico baseado no progresso real dos jogos"""
+        # 1. Se o admin definiu valor manual, respeitamos
         if self.manual_cashout_value is not None:
             return round(self.manual_cashout_value, 2)
 
+        # 2. Se a aposta já foi liquidada ou ganha, não calcula
         if self.status != 'Pendente':
             return 0.0
         
-        total_weight = 1.0
+        pesos_individuais = []
+        total_progresso_tempo = 0
+        jogos_no_bilhete = len(self.odds)
         
+        if jogos_no_bilhete == 0:
+            return 0.0
+
         for odd in self.odds:
             game = odd.game
+            # Cálculo de tempo (0 a 1)
+            tempo_decorrido = (game.saved_seconds or 0) / 60
+            proporcao_tempo = min(tempo_decorrido / 90.0, 1.0)
+            total_progresso_tempo += proporcao_tempo
+
+            # LÓGICA DE PESOS (Cada odd recebe um score de 0.1 a 2.0)
             if game.status == 'Trancada':
-                total_weight *= 0.1
-                continue
+                pesos_individuais.append(0.1)
             elif game.status == 'Finalizado':
-                total_weight *= 0.5
-                continue
-            
-            home = game.home_score or 0
-            away = game.away_score or 0
-            
-            if "Casa vence" in odd.description:
-                if home > away:
-                    vantagem = home - away
-                    total_weight *= (1.0 + (vantagem * 0.25))
-                elif home == away:
-                    total_weight *= 0.70
-                else:
-                    desvantagem = away - home
-                    total_weight *= max(0.05, 0.35 - (desvantagem * 0.15))
-
-            elif "Fora vence" in odd.description:
-                if away > home:
-                    vantagem = away - home
-                    total_weight *= (1.0 + (vantagem * 0.25))
-                elif home == away:
-                    total_weight *= 0.70
-                else:
-                    desvantagem = home - away
-                    total_weight *= max(0.05, 0.35 - (desvantagem * 0.15))
-
-            elif "Empate" in odd.description:
-                if home == away:
-                    total_weight *= 1.10
-                else:
-                    distancia = abs(home - away)
-                    total_weight *= max(0.05, 0.40 - (distancia * 0.20))
-                    
+                pesos_individuais.append(1.5 if odd.is_winner else 0.05)
             else:
-                numbers = re.findall(r'\d+', odd.description)
-                target = int(numbers[0]) if numbers else 1
-                current = game.current_progress or 0
+                desc = odd.description.lower()
+                home, away = game.home_score or 0, game.away_score or 0
                 
-                if "+" in odd.description:
-                    if current > target:
-                        total_weight *= odd.multiplier
-                    else:
-                        proximity = current / (target + 1) if target >= 0 else 0
-                        partial_multiplier = 1.0 + (odd.multiplier - 1.0) * proximity * 0.65
-                        total_weight *= partial_multiplier
+                if "casa vence" in desc:
+                    pesos_individuais.append(1.5 if home > away else (0.6 if home == away else 0.2))
+                elif "fora vence" in desc:
+                    pesos_individuais.append(1.5 if away > home else (0.6 if home == away else 0.2))
+                elif "empate" in desc:
+                    pesos_individuais.append(1.1 if home == away else 0.3)
+                elif "gol de cabeça" in desc:
+                    # Regra do gol de cabeça
+                    headers = (game.home_headers or 0) + (game.away_headers or 0)
+                    pesos_individuais.append(1.8 if headers > 0 else 0.6)
                 else:
-                    if current <= target:
-                        total_weight *= odd.multiplier
+                    # Lógica Over/Under
+                    numbers = re.findall(r'\d+', desc)
+                    target = int(numbers[0]) if numbers else 1
+                    current = game.current_progress or 0
+                    if "+" in desc:
+                        pesos_individuais.append(odd.multiplier if current > target else (1.0 + (odd.multiplier - 1.0) * (current / (target + 1)) * 0.65))
                     else:
-                        total_weight *= 0.05
-                
-        cashout_value = self.amount * total_weight * 0.80
-        if cashout_value > self.potential_win:
-            cashout_value = self.potential_win * 0.85
-            
-        return round(cashout_value, 2)
+                        pesos_individuais.append(odd.multiplier if current <= target else 0.05)
+
+        # Média ponderada (evita anulação de valores)
+        total_weight = sum(pesos_individuais) / jogos_no_bilhete
+        
+        # Margem dinâmica (0.75 a 0.95)
+        media_tempo = total_progresso_tempo / jogos_no_bilhete
+        fator_tempo_margem = 0.75 + (media_tempo * 0.20)
+        
+        # Valor final com PISO DE 10% (não zera nunca)
+        cashout_value = max(self.amount * 0.1, self.amount * total_weight * fator_tempo_margem)
+        
+        # Teto de segurança
+        return round(min(cashout_value, self.potential_win * 0.95), 2)
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -267,29 +259,40 @@ def load_user(user_id):
 
 def check_and_settle_live_bets(game):
     """
-    Varre os bilhetes pendentes sempre que há uma atualização para verificar se 
-    mercados já ganharam e realiza o pagamento imediato.
+    Versão Corrigida: Só processa bilhetes se o jogo estiver FINALIZADO.
+    Isso impede que apostas sejam pagas ou perdidas antes do fim do jogo.
     """
+    # SE O JOGO NÃO ESTÁ FINALIZADO, NÃO FAZEMOS NADA.
+    # Isso bloqueia a "vitória antecipada".
+    if game.status != 'Finalizado':
+        return
+
     pending_bets = Bet.query.filter_by(status='Pendente').all()
+    
     for bet in pending_bets:
+        # Verifica se o bilhete contém o jogo que foi finalizado
         if not any(o.game_id == game.id for o in bet.odds):
             continue
 
-        all_resolved_and_won = True
-        for o in bet.odds:
-            if o.game.status != 'Finalizado' and not o.is_winner:
-                all_resolved_and_won = False
-                break
-            elif o.game.status == 'Finalizado' and not o.is_winner:
+        # Verifica se TODOS os jogos do bilhete já terminaram (para apostas múltiplas)
+        all_games_finished = all(odd.game.status == 'Finalizado' for odd in bet.odds)
+        
+        if all_games_finished:
+            # Avalia se o bilhete é vencedor
+            ticket_won = True
+            for odd in bet.odds:
+                if not odd.is_winner:
+                    ticket_won = False
+                    break
+            
+            # Aplica o resultado final
+            if ticket_won:
+                bet.status = 'Ganhou'
+                bet.user.balance += bet.potential_win
+            else:
                 bet.status = 'Perdeu'
-                all_resolved_and_won = False
-                break
-
-        if all_resolved_and_won:
-            bet.status = 'Ganhou'
-            bet.user.balance += bet.potential_win
-
-    db.session.commit()
+            
+            db.session.commit()
 
 # ================= ROTAS DE AUTENTICAÇÃO E CONTA =================
 
@@ -417,27 +420,42 @@ def bet_history():
 @app.route('/bet/cashout/<int:bet_id>', methods=['POST'])
 @login_required
 def cashout(bet_id):
+    # 1. Obter o bilhete
     bet = db.session.get(Bet, bet_id)
-    if not bet or bet.user_id != current_user.id or bet.status != 'Pendente':
-        flash('Não foi possível processar o cash out.')
-        return redirect(url_for('bet_history'))
     
+    # Validações de segurança
+    if not bet or bet.user_id != current_user.id or bet.status != 'Pendente':
+        return jsonify(success=False, message="Cash Out indisponível.")
+    
+    # 2. Bloqueio de segurança
     for odd in bet.odds:
-        if odd.game.status == 'Trancada':
-            flash('Cash Out indisponível no momento: Mercados suspensos.')
-            return redirect(url_for('bet_history'))
-        if odd.game.status == 'Finalizado':
-            flash('A partida já terminou. Aguarde a liquidação.')
-            return redirect(url_for('bet_history'))
+        if odd.game.status in ['Trancada', 'Finalizado']:
+            return jsonify(success=False, message="Mercado suspenso ou finalizado.")
             
-    cashout_value = bet.calculate_live_cashout()
+    # 3. Recálculo no momento do clique s
+    valor_final = bet.calculate_live_cashout()
+    if valor_final <= 0:
+        return jsonify(success=False, message="Valor indisponível.")
 
-    current_user.balance += cashout_value
-    bet.status = 'Cashout'
-    db.session.commit()
-    flash(f'Cash Out realizado! R$ {cashout_value:.2f} foram adicionados à sua conta.')
-    return redirect(url_for('bet_history'))
-
+    # 4. TRANSAÇÃO ATÔMICA (A melhoria mais importante)
+    try:
+        # Mudamos o status para Processando dentro da mesma transação
+        bet.status = 'Cashout' # Já mudamos direto para o status final
+        
+        # Atualiza o saldo
+        if hasattr(current_user, 'saldo'):
+            current_user.saldo += float(valor_final)
+        else:
+            current_user.balance += float(valor_final)
+            
+        # COMMIT ÚNICO: Se algo der errado aqui, o SQLAlchemy desfaz tudo (rollback)
+        db.session.commit()
+        
+        return jsonify(success=True, message=f"R$ {valor_final:.2f} creditados!")
+        
+    except Exception as e:
+        db.session.rollback() # Desfaz qualquer alteração se der erro
+        return jsonify(success=False, message="Erro interno ao processar Cash Out.")
 # ================= PAINEL ADMINISTRATIVO & LIQUIDAÇÃO =================
 
 @app.route('/admin/dashboard', methods=['GET', 'POST'])
@@ -467,7 +485,11 @@ def admin_dashboard():
                 "palmeiras": "https://static.wikia.nocookie.net/cftu/images/c/cd/Palmeiras.png/revision/latest/thumbnail/width/360/height/450?cb=20170102174540&path-prefix=pt-br",
                 "santos": "https://upload.wikimedia.org/wikipedia/commons/1/15/Santos_Logo.png",
                 "flamengo": "https://logodetimes.com/times/flamengo/logo-flamengo-1536.png",
-                "real madrid": "https://upload.wikimedia.org/wikipedia/ar/thumb/5/56/Real_Madrid_CF.svg/330px-Real_Madrid_CF.svg.png"
+                "real madrid": "https://upload.wikimedia.org/wikipedia/ar/thumb/5/56/Real_Madrid_CF.svg/330px-Real_Madrid_CF.svg.png",
+                "brasil":"https://logodetimes.com/times/selecao-brasileira-brasil-novo-logo-2019/logo-selecao-brasileira-brasil-novo-logo-2019-4096.png",
+                "argentina":"https://logodetimes.com/times/argentina/selecao-argentina-de-futebol-4096.png",
+                "frança":"https://logodetimes.com/times/franca/selecao-francesa-de-futebol-2048.png",
+                "alemanha":"https://logodetimes.com/times/alemanha/selecao-alema-de-futebol-2048.png"
             }
             
             home_logo = logos_database.get(home_team.lower(), "/static/img/default.png")
@@ -702,7 +724,11 @@ def create_game():
                 "palmeiras": "https://static.wikia.nocookie.net/cftu/images/c/cd/Palmeiras.png/revision/latest/thumbnail/width/360/height/450?cb=20170102174540&path-prefix=pt-br",
                 "santos": "https://upload.wikimedia.org/wikipedia/commons/1/15/Santos_Logo.png",
                 "flamengo": "https://logodetimes.com/times/flamengo/logo-flamengo-1536.png",
-                "real madrid": "https://upload.wikimedia.org/wikipedia/ar/thumb/5/56/Real_Madrid_CF.svg/330px-Real_Madrid_CF.svg.png"
+                "real madrid": "https://upload.wikimedia.org/wikipedia/ar/thumb/5/56/Real_Madrid_CF.svg/330px-Real_Madrid_CF.svg.png",
+                "brasil":"https://logodetimes.com/times/selecao-brasileira-brasil-novo-logo-2019/logo-selecao-brasileira-brasil-novo-logo-2019-4096.png",
+                "argentina":"https://logodetimes.com/times/argentina/selecao-argentina-de-futebol-4096.png",
+                "frança":"https://logodetimes.com/times/franca/selecao-francesa-de-futebol-2048.png",
+                "alemanha":"https://logodetimes.com/times/alemanha/selecao-alema-de-futebol-2048.png"
         }
         
         home_logo = logos_database.get(home_team.lower(), "/static/img/default.png")
@@ -780,7 +806,18 @@ def settle_game(game_id):
     game = db.session.get(Game, game_id)
     if not game:
         return "Jogo não encontrado", 404
+
+    # 1. Trava de segurança: impede processar antes do fim do jogo
+    if game.period != "Fim de Jogo":
+        flash(f"Atenção: O jogo '{game.title}' está no período '{game.period}'. Mude para 'Fim de Jogo' antes de liquidar!", "danger")
+        return redirect(url_for('admin_dashboard'))
+    
+    # Se o jogo já estiver finalizado, evitamos reprocessamento
+    if game.status == 'Finalizado':
+        flash("Este jogo já foi liquidado anteriormente.", "warning")
+        return redirect(url_for('admin_dashboard'))
         
+    # Inicializa variáveis de placar
     home = game.home_score or 0
     away = game.away_score or 0
     total_goals = home + away
@@ -792,9 +829,7 @@ def settle_game(game_id):
     total_penalties_missed = (game.home_penalties_missed or 0) + (game.away_penalties_missed or 0)
     total_first_half_goals = (game.home_first_half_goals or 0) + (game.away_first_half_goals or 0)
 
-    # ====================================================================
-    # STEP 1: CALCULA E GRAVA AUTOMATICAMENTE OS VENCEDORES NO BANCO
-    # ====================================================================
+    # 2. STEP 1: Calcula vencedores das odds deste jogo específico
     for odd in game.odds:
         desc = odd.description.lower().strip()
         
@@ -839,39 +874,36 @@ def settle_game(game_id):
                     odd.is_winner = metric <= val
 
     game.status = 'Finalizado'
-    db.session.commit()
     
-    # ====================================================================
-    # STEP 2: VALIDAÇÃO DOS BILHETES PENDENTES
-    # ====================================================================
-    pending_bets = Bet.query.filter_by(status='Pendente').all()
-    
-    for bet in pending_bets:
-        if any(odd.game_id == game.id for odd in bet.odds):
-            all_games_finished = True
-            ticket_won = True
-            
-            for odd in bet.odds:
-                if odd.game.status != 'Finalizado':
-                    all_games_finished = False
-                    continue
-                
-                if not odd.is_winner:
-                    ticket_won = False
-                    bet.status = 'Perdeu'
-                    break
-            
-                if all_games_finished and ticket_won:
-                 bet.status = 'Ganhou'
-                if bet.user:
-                    if hasattr(bet.user, 'saldo'):
-                        bet.user.saldo += bet.potential_win
-                    elif hasattr(bet.user, 'balance'):
-                        bet.user.balance += bet.potential_win
-
-    db.session.commit()
-    
-    flash(f"O confronto '{game.title}' foi finalizado com sucesso e os bilhetes foram processados.", "success")
+    # 3. STEP 2: Validação dos bilhetes com Transação Única
+    # Usamos try/except para garantir que se algo falhar, o jogo não fique "meio liquidado"
+    try:
+        pending_bets = Bet.query.filter_by(status='Pendente').all()
+        
+        for bet in pending_bets:
+            if any(odd.game_id == game.id for odd in bet.odds):
+                # Verifica se TODOS os jogos deste bilhete já chegaram em 'Finalizado'
+                if all(o.game.status == 'Finalizado' for o in bet.odds):
+                    ticket_won = all(odd.is_winner for odd in bet.odds)
+                    
+                    if ticket_won:
+                        bet.status = 'Ganhou'
+                        valor_premio = float(bet.potential_win)
+                        if hasattr(bet.user, 'saldo'):
+                            bet.user.saldo += valor_premio
+                        elif hasattr(bet.user, 'balance'):
+                            bet.user.balance += valor_premio
+                    else:
+                        bet.status = 'Perdeu'
+        
+        # COMMIT ÚNICO: Salva todas as alterações (odds, status do jogo e saldos) de uma vez
+        db.session.commit()
+        flash(f"O confronto '{game.title}' foi finalizado e todos os bilhetes processados.", "success")
+        
+    except Exception as e:
+        db.session.rollback() # Se der erro, desfaz tudo para não corromper o saldo
+        flash(f"Erro ao processar liquidação: {str(e)}", "danger")
+        
     return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/approve_transaction/<int:tx_id>', methods=['POST'])
