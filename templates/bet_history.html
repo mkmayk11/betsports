@@ -76,6 +76,9 @@
                     {% if live_proposal and live_proposal > 0 %}
                         <form action="{{ url_for('cashout', bet_id=bet.id) }}" method="POST" style="margin: 0;">
                             <button type="submit" 
+                                    id="btn-cashout-{{ bet.id }}"
+                                    class="btn-cashout"
+                                    data-id="{{ bet.id }}"
                                     style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.9em; transition: background 0.2s;"
                                     onmouseover="this.style.background='#0056b3'" 
                                     onmouseout="this.style.background='#007bff'">
@@ -99,4 +102,54 @@
         {% endfor %}
     </div>
 </div>
+<script>
+    // 1. Função para carregar valores (já existente)
+    function atualizarCashouts() {
+        document.querySelectorAll('.btn-cashout').forEach(btn => {
+            let betId = btn.getAttribute('data-id');
+            fetch('/get_cashout_value/' + betId)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.valor > 0) {
+                        btn.innerText = `💰 Encerrar (R$ ${data.valor.toFixed(2)})`;
+                    }
+                })
+                .catch(err => console.log('Erro ao atualizar valores:', err));
+        });
+    }
+
+    // 2. ADICIONE ESTA FUNÇÃO PARA O CLIQUE NO BOTÃO
+    document.querySelectorAll('.btn-cashout').forEach(btn => {
+        btn.addEventListener('click', function() {
+            let betId = this.getAttribute('data-id');
+            
+            // Bloqueia o botão para evitar cliques duplos
+            this.disabled = true;
+            this.innerText = "Processando...";
+
+            fetch('/bet/cashout/' + betId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message); // Exibe o sucesso
+                    location.reload();   // Recarrega a página para atualizar saldos/status
+                } else {
+                    alert(data.message); // Exibe o erro
+                    this.disabled = false;
+                    this.innerText = "💰 Tentar Novamente";
+                }
+            })
+            .catch(err => {
+                alert("Erro de comunicação com o servidor.");
+                this.disabled = false;
+            });
+        });
+    });
+
+    // Inicia a verificação de valores a cada 10 segundos
+    setInterval(atualizarCashouts, 10000);
+</script>
 {% endblock %}
