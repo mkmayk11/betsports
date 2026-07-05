@@ -1,18 +1,15 @@
 import os
 import re
 from datetime import datetime, timezone
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecreto123'
-# Puxa o link do Neon na nuvem; se não achar, usa o SQLite local
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
 
-# Correção necessária: o SQLAlchemy exige que comece com 'postgresql://', 
-# mas algumas nuvens entregam como 'postgres://'postgresql://neondb_owner:npg_meVRBsiA3D2U@ep-gentle-salad-adp0i6vu-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
@@ -27,7 +24,87 @@ OPCOES_PADRAO = [
     "Casa vence", "Empate", "Fora vence",
     "+ de 0 gol","+ 1 gol", "+ 2 gols", "+ 3 gols", "+ 4 gols", "+ 5 gols",
     "- 1 gol", "- 2 gols", "- 3 gols", "- 4 gols", "- 5 gols",
-    "gol de cabeça", "sem gols", "+ 2 cartões", "expulsões","gol de bicicleta","+ 5 escanteios","+ 10 escanteios","- 10 escanteios","- 5 escanteios","gol de penalti","penalti perdido","gol no primeiro tempo","sem gol primeiro tempo","+ 0 gol no primeiro tempo","+ de 1 gol no primeiro tempo","ambos marcam - sim ","ambos marcam - nao"]
+    "gol de cabeça", "sem gols", "+ 2 cartões", "expulsões","gol de bicicleta",
+    "+ 5 escanteios","+ 10 escanteios","- 10 escanteios","- 5 escanteios",
+    "gol de penalti","penalti perdido","gol no primeiro tempo","sem gol primeiro tempo",
+    "+ 0 gol no primeiro tempo","+ de 1 gol no primeiro tempo","ambos marcam - sim ","ambos marcam - nao"
+]
+
+# ================= HELPER FUNCTIONS (MOTOR CENTRAL DE REGRAS) =================
+
+def get_game_metrics(game):
+    """Extrai todas as estatísticas da partida em um dicionário unificado."""
+    return {
+        'home': game.home_score or 0,
+        'away': game.away_score or 0,
+        'total_goals': (game.home_score or 0) + (game.away_score or 0),
+        'total_cards': (game.home_cards or 0) + (game.away_cards or 0),
+        'total_headers': (game.home_headers or 0) + (game.away_headers or 0),
+        'total_corners': (game.home_corners or 0) + (game.away_corners or 0),
+        'total_bicycle': (game.home_bicycle_goals or 0) + (game.away_bicycle_goals or 0),
+        'total_penalties_scored': (game.home_penalties_scored or 0) + (game.away_penalties_scored or 0),
+        'total_penalties_missed': (game.home_penalties_missed or 0) + (game.away_penalties_missed or 0),
+        'total_first_half_goals': (game.home_first_half_goals or 0) + (game.away_first_half_goals or 0),
+        'total_expulsions': (game.home_expulsions or 0) + (game.away_expulsions or 0)
+    }
+
+def get_metric_value_for_cashout(desc, metrics):
+    """Identifica qual métrica numérica a odd está monitorando (usado no Cashout)."""
+    desc = desc.lower().strip()
+    if "cart" in desc or "card" in desc:
+        return metrics['total_cards']
+    elif "cabeç" in desc or "header" in desc:
+        return metrics['total_headers']
+    elif "escanteio" in desc or "corner" in desc:
+        return metrics['total_corners']
+    elif "primeiro tempo" in desc or "1º tempo" in desc:
+        return metrics['total_first_half_goals']
+    elif "expuls" in desc:
+        return metrics['total_expulsions']
+    else:
+        return metrics['total_goals']
+
+def evaluate_odd_logic(desc, metrics):
+    """Verifica se a odd bateu com base nas métricas atuais."""
+    desc = desc.lower().strip()
+    
+    if "casa vence" in desc:
+        return metrics['home'] > metrics['away']
+    elif "fora vence" in desc:
+        return metrics['away'] > metrics['home']
+    elif "empate" in desc:
+        return metrics['home'] == metrics['away']
+    elif "sem gols" in desc:
+        return metrics['total_goals'] == 0
+    elif "sem gol primeiro tempo" in desc:
+        return metrics['total_first_half_goals'] == 0
+    elif "gol de bicicleta" in desc:
+        return metrics['total_bicycle'] > 0
+    elif "gol de penalti" in desc or "gol de pênalti" in desc:
+        return metrics['total_penalties_scored'] > 0
+    elif "penalti perdido" in desc or "pênalti perdido" in desc:
+        return metrics['total_penalties_missed'] > 0
+    elif "ambos marcam - sim" in desc:
+        return metrics['home'] > 0 and metrics['away'] > 0
+    elif "ambos marcam - nao" in desc or "ambos marcam - não" in desc:
+        return metrics['home'] == 0 or metrics['away'] == 0
+    elif "expulsões" in desc or "expulsao" in desc or "expulsão" in desc:
+        return metrics['total_expulsions'] > 0
+    elif "gol de cabeça" in desc and not any(x in desc for x in ["+", "-", "mais", "menos"]):
+        return metrics['total_headers'] > 0
+    elif "gol no primeiro tempo" in desc and not any(x in desc for x in ["+", "-", "mais", "menos"]):
+        return metrics['total_first_half_goals'] > 0
+    else:
+        nums = re.findall(r'\d+(?:\.\d+)?', desc)
+        if nums:
+            val = float(nums[0])
+            metric_val = get_metric_value_for_cashout(desc, metrics)
+                
+            if "+" in desc or "mais de" in desc or "over" in desc:
+                return metric_val > val
+            elif "-" in desc or "menos de" in desc or "under" in desc:
+                return metric_val <= val
+    return False
 
 # ================= MODELOS DE BANCO DE DADOS =================
 
@@ -48,26 +125,20 @@ class User(UserMixin, db.Model):
 class Game(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
-    status = db.Column(db.String(20), default='Aberta')  # Aberta, Ao Vivo, Trancada, Finalizado
-    current_progress = db.Column(db.Integer, default=0)  # Quantidade de gols live
-    home_score = db.Column(db.Integer, default=0)        # Gols do time da Casa
+    status = db.Column(db.String(20), default='Aberta')
+    current_progress = db.Column(db.Integer, default=0)
+    home_score = db.Column(db.Integer, default=0)
     away_score = db.Column(db.Integer, default=0) 
-    home_headers = db.Column(db.Integer, default=0)  # Gols de cabeça - Casa
-    away_headers = db.Column(db.Integer, default=0)  # Gols de cabeça - Fora
-    home_cards = db.Column(db.Integer, default=0)     # Cartões Amarelos - Casa
-    away_cards = db.Column(db.Integer, default=0)     # Cartões Amarelos - Fora
-    
-    # --- CAMPOS ADICIONADOS PARA OS ESCUDOS E NOMES SEPARADOS (OPÇÃO A) ---
+    home_headers = db.Column(db.Integer, default=0)
+    away_headers = db.Column(db.Integer, default=0)
+    home_cards = db.Column(db.Integer, default=0)
+    away_cards = db.Column(db.Integer, default=0)
     home_team = db.Column(db.String(100), nullable=False, default="Time Casa")
     away_team = db.Column(db.String(100), nullable=False, default="Time Fora")
-    home_logo = db.Column(db.String(500), nullable=True)  # URL ou link do escudo mandante
-    away_logo = db.Column(db.String(500), nullable=True)  # URL ou link do escudo visitante
-
-    # --- CAMPOS DE EXPULSÕES (Resolve o bug do "x" vermelho que ficava vazio) ---
+    home_logo = db.Column(db.String(500), nullable=True)
+    away_logo = db.Column(db.String(500), nullable=True)
     home_expulsions = db.Column(db.Integer, default=0)
     away_expulsions = db.Column(db.Integer, default=0)
-    
-    # --- NOVOS CAMPOS ADICIONADOS PARA SUPORTAR AS NOVAS ODDS ---
     home_corners = db.Column(db.Integer, default=0)
     away_corners = db.Column(db.Integer, default=0)
     home_bicycle_goals = db.Column(db.Integer, default=0)
@@ -78,8 +149,6 @@ class Game(db.Model):
     away_penalties_missed = db.Column(db.Integer, default=0)
     home_first_half_goals = db.Column(db.Integer, default=0)
     away_first_half_goals = db.Column(db.Integer, default=0)
-    
-    # --- SISTEMA DE RELÓGIO E TEMPO DE JOGO ---
     period = db.Column(db.String(50), default="Não Iniciado") 
     timer_active = db.Column(db.Boolean, default=False)
     timer_start_time = db.Column(db.DateTime, nullable=True)
@@ -88,7 +157,6 @@ class Game(db.Model):
     odds = db.relationship('Odd', backref='game', lazy=True)
 
     def get_current_time(self):
-        """Retorna os minutos e segundos atuais calculados no servidor de forma dinâmica"""
         if not self.timer_active or not self.timer_start_time:
             total_seconds = self.saved_seconds
         else:
@@ -106,67 +174,10 @@ class Odd(db.Model):
     is_winner = db.Column(db.Boolean, default=False)
 
     def is_currently_hitting(self):
-        """Avalia se este palpite específico está se concretizando no momento atual da partida"""
         if self.game.status == 'Finalizado':
             return self.is_winner
-            
-        home = self.game.home_score or 0
-        away = self.game.away_score or 0
-        total_goals = home + away
-        total_cards = (self.game.home_cards or 0) + (self.game.away_cards or 0)
-        total_headers = (self.game.home_headers or 0) + (self.game.away_headers or 0)
-        
-        # Novas métricas integradas para checagem ao vivo
-        total_corners = (self.game.home_corners or 0) + (self.game.away_corners or 0)
-        total_bicycle = (self.game.home_bicycle_goals or 0) + (self.game.away_bicycle_goals or 0)
-        total_penalties_scored = (self.game.home_penalties_scored or 0) + (self.game.away_penalties_scored or 0)
-        total_penalties_missed = (self.game.home_penalties_missed or 0) + (self.game.away_penalties_missed or 0)
-        total_first_half_goals = (self.game.home_first_half_goals or 0) + (self.game.away_first_half_goals or 0)
-        
-        desc = self.description.lower().strip()
-        
-        if "casa vence" in desc:
-            return home > away
-        elif "fora vence" in desc:
-            return away > home
-        elif "empate" in desc:
-            return home == away
-        elif "sem gols" in desc:
-            return total_goals == 0
-        elif "sem gol primeiro tempo" in desc:
-            return total_first_half_goals == 0
-        elif "gol de bicicleta" in desc:
-            return total_bicycle > 0
-        elif "gol de penalti" in desc or "gol de pênalti" in desc:
-            return total_penalties_scored > 0
-        elif "penalti perdido" in desc or "pênalti perdido" in desc:
-            return total_penalties_missed > 0
-        elif "gol de cabeça" in desc and not any(x in desc for x in ["+", "-", "mais de", "menos de"]):
-            return total_headers > 0
-        elif "gol no primeiro tempo" in desc and not any(x in desc for x in ["+", "-", "mais de", "menos de"]):
-            return total_first_half_goals > 0
-            
-        # Tratamento genérico expandido para linhas de mais/menos com números (+ 5 escanteios, etc)
-        nums = re.findall(r'\d+(?:\.\d+)?', desc)
-        if nums:
-            val = float(nums[0])
-            if "cart" in desc or "card" in desc:
-                metric = total_cards
-            elif "cabeç" in desc or "header" in desc:
-                metric = total_headers
-            elif "escanteio" in desc or "corner" in desc:
-                metric = total_corners
-            elif "primeiro tempo" in desc or "1º tempo" in desc:
-                metric = total_first_half_goals
-            else:
-                metric = total_goals
-                
-            if "+" in desc or "mais de" in desc or "over" in desc:
-                return metric > val
-            elif "-" in desc or "menos de" in desc or "under" in desc:
-                return metric <= val
-                
-        return False
+        metrics = get_game_metrics(self.game)
+        return evaluate_odd_logic(self.description, metrics)
 
 class Bet(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -174,21 +185,18 @@ class Bet(db.Model):
     amount = db.Column(db.Float, nullable=False)
     total_multiplier = db.Column(db.Float, nullable=False)
     potential_win = db.Column(db.Float, nullable=False)
-    status = db.Column(db.String(50), default='Pendente')  # Pendente, Ganhou, Perdeu, Cashout
+    status = db.Column(db.String(50), default='Pendente')
     manual_cashout_value = db.Column(db.Float, nullable=True, default=None)
     odds = db.relationship('Odd', secondary=bet_odds, backref=db.backref('bets', lazy=True))
 
     def calculate_live_cashout(self):
-        # 1. Se o admin definiu valor manual, respeitamos
         if self.manual_cashout_value is not None:
             return round(self.manual_cashout_value, 2)
 
-        # 2. Se a aposta já foi liquidada ou ganha, não calcula
         if self.status != 'Pendente':
             return 0.0
         
         pesos_individuais = []
-        total_progresso_tempo = 0
         jogos_no_bilhete = len(self.odds)
         
         if jogos_no_bilhete == 0:
@@ -196,51 +204,99 @@ class Bet(db.Model):
 
         for odd in self.odds:
             game = odd.game
-            # Cálculo de tempo (0 a 1)
-            tempo_decorrido = (game.saved_seconds or 0) / 60
+            
+            # --- CÁLCULO DE TEMPO EM TEMPO REAL ---
+            if game.timer_active and game.timer_start_time:
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                start = game.timer_start_time.replace(tzinfo=None)
+                elapsed_seconds = (game.saved_seconds or 0) + int((now - start).total_seconds())
+            else:
+                elapsed_seconds = game.saved_seconds or 0
+                
+            tempo_decorrido = elapsed_seconds / 60.0
             proporcao_tempo = min(tempo_decorrido / 90.0, 1.0)
-            total_progresso_tempo += proporcao_tempo
+            # -------------------------------------------
 
-            # LÓGICA DE PESOS (Cada odd recebe um score de 0.1 a 2.0)
             if game.status == 'Trancada':
                 pesos_individuais.append(0.1)
             elif game.status == 'Finalizado':
-                pesos_individuais.append(1.5 if odd.is_winner else 0.05)
+                pesos_individuais.append(odd.multiplier if odd.is_winner else 0.0)
             else:
-                desc = odd.description.lower()
-                home, away = game.home_score or 0, game.away_score or 0
+                desc = odd.description.lower().strip()
+                metrics = get_game_metrics(game)
                 
-                if "casa vence" in desc:
-                    pesos_individuais.append(1.5 if home > away else (0.6 if home == away else 0.2))
-                elif "fora vence" in desc:
-                    pesos_individuais.append(1.5 if away > home else (0.6 if home == away else 0.2))
-                elif "empate" in desc:
-                    pesos_individuais.append(1.1 if home == away else 0.3)
-                elif "gol de cabeça" in desc:
-                    # Regra do gol de cabeça
-                    headers = (game.home_headers or 0) + (game.away_headers or 0)
-                    pesos_individuais.append(1.8 if headers > 0 else 0.6)
-                else:
-                    # Lógica Over/Under
-                    numbers = re.findall(r'\d+', desc)
-                    target = int(numbers[0]) if numbers else 1
-                    current = game.current_progress or 0
-                    if "+" in desc:
-                        pesos_individuais.append(odd.multiplier if current > target else (1.0 + (odd.multiplier - 1.0) * (current / (target + 1)) * 0.65))
+                # 1. AVALIA SE A ODD ESTÁ GANHANDO OU PERDENDO NESTE EXATO MOMENTO
+                is_hitting = evaluate_odd_logic(desc, metrics)
+                
+                # 2. CALCULA A "ESPERANÇA" BASE DA APOSTA
+                peso_base = 0.0
+                
+                # --- LÓGICA DE SALDO DE GOLS PARA VITÓRIAS ---
+                if "casa vence" in desc or "fora vence" in desc:
+                    gols_favor = metrics['home'] if "casa vence" in desc else metrics['away']
+                    gols_contra = metrics['away'] if "casa vence" in desc else metrics['home']
+                    saldo = gols_favor - gols_contra
+                    
+                    if saldo >= 3:
+                        peso_base = odd.multiplier * 9.70 
+                    elif saldo == 2:
+                        peso_base = odd.multiplier * 4.70 
+                    elif saldo == 1:
+                        peso_base = odd.multiplier * 0.85 
+                    elif saldo == 0:
+                        peso_base = odd.multiplier * 0.30 
+                    elif saldo == -1:
+                        peso_base = odd.multiplier * 0.10 
                     else:
-                        pesos_individuais.append(odd.multiplier if current <= target else 0.05)
+                        peso_base = odd.multiplier * 0.02 
+                        
+                # --- LÓGICA PARA EMPATE ---
+                elif "empate" in desc:
+                    saldo = abs(metrics['home'] - metrics['away'])
+                    if saldo == 0:
+                        peso_base = odd.multiplier * 0.80 
+                    elif saldo == 1:
+                        peso_base = odd.multiplier * 0.20 
+                    else:
+                        peso_base = odd.multiplier * 0.02
+                        
+                # --- MANTÉM AS DEMAIS REGRAS ORIGINAIS ---
+                elif "gol de cabeça" in desc and not any(x in desc for x in ["+", "-", "mais", "menos"]):
+                    peso_base = odd.multiplier if metrics['total_headers'] > 0 else 0.4
+                elif "ambos marcam - sim" in desc:
+                    peso_base = odd.multiplier if (metrics['home'] > 0 and metrics['away'] > 0) else 0.4
+                elif "ambos marcam - nao" in desc or "ambos marcam - não" in desc:
+                    peso_base = odd.multiplier if (metrics['home'] == 0 or metrics['away'] == 0) else 0.0
+                elif "expulsões" in desc or "expulsao" in desc:
+                    peso_base = odd.multiplier if metrics['total_expulsions'] > 0 else 0.3
+                else:
+                    nums = re.findall(r'\d+', desc)
+                    target = int(nums[0]) if nums else 1
+                    current = get_metric_value_for_cashout(desc, metrics)
+                    if "+" in desc or "mais de" in desc or "over" in desc:
+                        peso_base = odd.multiplier if current > target else (1.0 * (current / (target + 1)))
+                    else: 
+                        peso_base = odd.multiplier if current <= target else 0.0
 
-        # Média ponderada (evita anulação de valores)
+                # 3. A MÁGICA: O TEMPO É AMIGO OU INIMIGO?
+                if is_hitting:
+                    # Tempo a favor: Aposta está batendo. O multiplicador sobe de 70% para quase 100% no fim do jogo.
+                    fator_tempo = 0.70 + (proporcao_tempo * 0.30) 
+                else:
+                    # Tempo contra: Aposta está perdendo. O multiplicador começa normal e vai CAINDO PARA ZERO no fim do jogo.
+                    fator_tempo = 1.0 - proporcao_tempo
+                    
+                peso_final = peso_base * fator_tempo
+                pesos_individuais.append(peso_final)
+
+        # Tira a média dos pesos de todos os jogos do bilhete
         total_weight = sum(pesos_individuais) / jogos_no_bilhete
         
-        # Margem dinâmica (0.75 a 0.95)
-        media_tempo = total_progresso_tempo / jogos_no_bilhete
-        fator_tempo_margem = 0.75 + (media_tempo * 0.20)
+        # Piso de 10% de recuperação (para ele não perder tudo antes do juiz apitar)
+        cashout_value = max(self.amount * 0.1, self.amount * total_weight)
         
-        # Valor final com PISO DE 10% (não zera nunca)
-        cashout_value = max(self.amount * 0.1, self.amount * total_weight * fator_tempo_margem)
-        
-        # Teto de segurança
+        # Teto de segurança (A casa nunca paga mais que 95% do prêmio potencial no cashout antecipado)
         return round(min(cashout_value, self.potential_win * 0.95), 2)
 
 class Transaction(db.Model):
@@ -258,34 +314,24 @@ def load_user(user_id):
 # ================= FUNÇÃO DE LIQUIDAÇÃO ANTECIPADA AUTOMÁTICA =================
 
 def check_and_settle_live_bets(game):
-    """
-    Versão Corrigida: Só processa bilhetes se o jogo estiver FINALIZADO.
-    Isso impede que apostas sejam pagas ou perdidas antes do fim do jogo.
-    """
-    # SE O JOGO NÃO ESTÁ FINALIZADO, NÃO FAZEMOS NADA.
-    # Isso bloqueia a "vitória antecipada".
     if game.status != 'Finalizado':
         return
 
     pending_bets = Bet.query.filter_by(status='Pendente').all()
     
     for bet in pending_bets:
-        # Verifica se o bilhete contém o jogo que foi finalizado
         if not any(o.game_id == game.id for o in bet.odds):
             continue
 
-        # Verifica se TODOS os jogos do bilhete já terminaram (para apostas múltiplas)
         all_games_finished = all(odd.game.status == 'Finalizado' for odd in bet.odds)
         
         if all_games_finished:
-            # Avalia se o bilhete é vencedor
             ticket_won = True
             for odd in bet.odds:
                 if not odd.is_winner:
                     ticket_won = False
                     break
             
-            # Aplica o resultado final
             if ticket_won:
                 bet.status = 'Ganhou'
                 bet.user.balance += bet.potential_win
@@ -344,14 +390,13 @@ def logout():
 def finance():
     if request.method == 'POST':
         amount = float(request.form.get('amount', 0))
-        # Captura o valor exato que vem do seu <select name="type">
         tx_type = request.form.get('type') 
         
         if amount > 0 and tx_type in ['Deposito', 'Saque']:
             new_tx = Transaction(
                 user_id=current_user.id, 
                 amount=amount, 
-                type=tx_type, # Salva como 'Deposito' ou 'Saque'
+                type=tx_type,
                 status='Pendente'
             )
             db.session.add(new_tx)
@@ -409,7 +454,13 @@ def dashboard():
         return redirect(url_for('bet_history'))
 
     games = Game.query.filter(Game.status != 'Finalizado').all()
-    return render_template('dashboard.html', games=games)
+    
+    # Renderização empacotada com verificador de nome para auto-refresh
+    response = make_response(render_template('dashboard.html', games=games))
+    if current_user.username == 'pol':
+        response.headers['Refresh'] = '10'
+        
+    return response
 
 @app.route('/bet_history')
 @login_required
@@ -420,52 +471,41 @@ def bet_history():
 @app.route('/bet/cashout/<int:bet_id>', methods=['POST'])
 @login_required
 def cashout(bet_id):
-    # 1. Obter o bilhete
     bet = db.session.get(Bet, bet_id)
     
-    # Validações de segurança
     if not bet or bet.user_id != current_user.id or bet.status != 'Pendente':
         return jsonify(success=False, message="Cash Out indisponível.")
     
-    # 2. Bloqueio de segurança
     for odd in bet.odds:
         if odd.game.status in ['Trancada', 'Finalizado']:
             return jsonify(success=False, message="Mercado suspenso ou finalizado.")
             
-    # 3. Recálculo no momento do clique s
     valor_final = bet.calculate_live_cashout()
     if valor_final <= 0:
         return jsonify(success=False, message="Valor indisponível.")
 
-    # 4. TRANSAÇÃO ATÔMICA (A melhoria mais importante)
     try:
-        # Mudamos o status para Processando dentro da mesma transação
-        bet.status = 'Cashout' # Já mudamos direto para o status final
-        
-        # Atualiza o saldo
+        bet.status = 'Cashout'
         if hasattr(current_user, 'saldo'):
             current_user.saldo += float(valor_final)
         else:
             current_user.balance += float(valor_final)
             
-        # COMMIT ÚNICO: Se algo der errado aqui, o SQLAlchemy desfaz tudo (rollback)
         db.session.commit()
-        
         return jsonify(success=True, message=f"R$ {valor_final:.2f} creditados!")
         
     except Exception as e:
-        db.session.rollback() # Desfaz qualquer alteração se der erro
+        db.session.rollback()
         return jsonify(success=False, message="Erro interno ao processar Cash Out.")
+
 # ================= PAINEL ADMINISTRATIVO & LIQUIDAÇÃO =================
 
 @app.route('/admin/dashboard', methods=['GET', 'POST'])
 @login_required
 def admin_dashboard():
-    # Verifica se é admin
     if not current_user.is_admin:
         return redirect(url_for('dashboard'))
     
-    # --- LÓGICA DE POST (CRIAÇÃO DE PARTIDA) ---
     if request.method == 'POST':
         title_input = request.form.get('title') 
         if title_input:
@@ -515,54 +555,21 @@ def admin_dashboard():
             flash("Partida e mercados criados com sucesso!")
             return redirect(url_for('admin_dashboard'))
 
-    # --- LÓGICA DE GET (EXIBIÇÃO DOS DADOS) ---
     games = Game.query.order_by(Game.id.desc()).all()
     all_bets = Bet.query.order_by(Bet.id.desc()).all()
     
-    # --- TESTE DE DIAGNÓSTICO ---
-    # Vamos buscar apenas pelo tipo, sem filtrar pelo status, 
-    # e sem complicar com ilike no status por enquanto.
-    
-    pending_deposits = Transaction.query.filter(Transaction.type.ilike('%deposito%')).all()
-    pending_withdrawals = Transaction.query.filter(Transaction.type.ilike('%saque%')).all()
-
-    # LOG NO TERMINAL PARA DEBUGAR
-    print(f"DEBUG: Encontrei {len(pending_deposits)} depósitos no banco.")
-    for d in pending_deposits:
-        print(f"DEBUG: Depósito encontrado -> Tipo: '{d.type}', Status: '{d.status}'")
-    
-    # Junta tudo em uma única lista que o seu HTML já sabe como usar
-    todas_pendentes = Transaction.query.filter(Transaction.status == 'Pendente').all()
+    pending_transactions = Transaction.query.filter_by(status='Pendente').all()
+    pending_deposits = Transaction.query.filter(Transaction.type.ilike('%deposito%'), Transaction.status == 'Pendente').all()
+    pending_withdrawals = Transaction.query.filter(Transaction.type.ilike('%saque%'), Transaction.status == 'Pendente').all()
     
     return render_template(
         'admin_dashboard.html', 
         games=games, 
         all_bets=all_bets, 
-        pending_transactions=todas_pendentes  # Mudei o nome aqui para bater com o HTML
-    )
-    
-    # Se você ainda não vir nada, verifique no seu DB Browser se o tipo está 
-    # exatamente 'deposito' (minúsculo) ou 'Deposito' (maiúsculo).
-    
-    return render_template(
-        'admin_dashboard.html', 
-        games=games, 
-        all_bets=all_bets, 
+        pending_transactions=pending_transactions,
         deposits=pending_deposits, 
         withdrawals=pending_withdrawals
     )
-
-    # --- RENDERIZAÇÃO NORMAL DA PÁGINA (GET) ---
-    games = Game.query.order_by(Game.id.desc()).all()
-    pending_transactions = Transaction.query.filter_by(status='Pendente').all()
-    all_bets = Bet.query.order_by(Bet.id.desc()).all()
-    
-    # 🌟 LINHAS ADICIONADAS SEM ALTERAR AS ANTERIORES: Separando depósitos e saques pendentes
-    pending_deposits = Transaction.query.filter_by(type='deposit', status='Pendente').all()
-    pending_withdrawals = Transaction.query.filter_by(type='withdraw', status='Pendente').all()
-    
-    # Retornando o template com as suas variáveis originais intactas + as novas tabelas separadas
-    return render_template('admin_dashboard.html', games=games, pending_transactions=pending_transactions, all_bets=all_bets, deposits=pending_deposits, withdrawals=pending_withdrawals)
 
 @app.route('/admin/update_game_progress/<int:game_id>', methods=['POST'])
 @login_required
@@ -587,14 +594,12 @@ def update_game_score(game_id):
         
     game = Game.query.get_or_404(game_id)
     
-    # Capturando dados do formulário HTML (Originais e Novos Injetados)
     game.home_score = int(request.form.get('home_score', 0))
     game.away_score = int(request.form.get('away_score', 0))
     game.home_headers = int(request.form.get('home_headers', 0))
     game.away_headers = int(request.form.get('away_headers', 0))
     game.home_cards = int(request.form.get('home_cards', 0))
     game.away_cards = int(request.form.get('away_cards', 0))
-    
     game.home_corners = int(request.form.get('home_corners', 0))
     game.away_corners = int(request.form.get('away_corners', 0))
     game.home_bicycle_goals = int(request.form.get('home_bicycle_goals', 0))
@@ -605,76 +610,19 @@ def update_game_score(game_id):
     game.away_penalties_missed = int(request.form.get('away_penalties_missed', 0))
     game.home_first_half_goals = int(request.form.get('home_first_half_goals', 0))
     game.away_first_half_goals = int(request.form.get('away_first_half_goals', 0))
+    game.home_expulsions = int(request.form.get('home_expulsions', 0))
+    game.away_expulsions = int(request.form.get('away_expulsions', 0))
     
     game.current_progress = game.home_score + game.away_score
     
-    home = game.home_score
-    away = game.away_score
-    total_goals = game.current_progress
-    total_cards = game.home_cards + game.away_cards
-    total_headers = game.home_headers + game.away_headers
-    total_corners = game.home_corners + game.away_corners
-    total_bicycle = game.home_bicycle_goals + game.away_bicycle_goals
-    total_penalties_scored = game.home_penalties_scored + game.away_penalties_scored
-    total_penalties_missed = game.home_penalties_missed + game.away_penalties_missed
-    total_first_half_goals = game.home_first_half_goals + game.away_first_half_goals
-    
     print(f"\n--- 🔄 ATUALIZANDO JOGO: {game.title} ---")
-    print(f"Gols: {total_goals} | Cartões: {total_cards} | Cabeça: {total_headers} | Escanteios: {total_corners}")
     
-    # ==========================================================
-    # 🤖 SISTEMA DE CHECAGEM ULTRA-ROBUSTO DE ODDS COMPLETO
-    # ==========================================================
+    metrics = get_game_metrics(game)
     for odd in game.odds:
-        desc = odd.description.lower().strip()
-        print(f" -> Analisando Odd Live: '{odd.description}'")
-        
-        if "casa vence" in desc:
-            odd.is_winner = home > away
-        elif "fora vence" in desc:
-            odd.is_winner = away > home
-        elif "empate" in desc:
-            odd.is_winner = home == away
-        elif "sem gols" in desc:
-            odd.is_winner = total_goals == 0
-        elif "sem gol primeiro tempo" in desc:
-            odd.is_winner = total_first_half_goals == 0
-        elif "gol de bicicleta" in desc:
-            odd.is_winner = total_bicycle > 0
-        elif "gol de penalti" in desc or "gol de pênalti" in desc:
-            odd.is_winner = total_penalties_scored > 0
-        elif "penalti perdido" in desc or "pênalti perdido" in desc:
-            odd.is_winner = total_penalties_missed > 0
-        elif "gol de cabeça" in desc and not any(x in desc for x in ["+", "-", "mais de", "menos de"]):
-            odd.is_winner = total_headers > 0
-        elif "gol no primeiro tempo" in desc and not any(x in desc for x in ["+", "-", "mais de", "menos de"]):
-            odd.is_winner = total_first_half_goals > 0
-        else:
-            nums = re.findall(r'\d+(?:\.\d+)?', desc)
-            if nums:
-                val = float(nums[0])
-                if "cart" in desc or "card" in desc:
-                    metric = total_cards
-                elif "cabeç" in desc or "header" in desc:
-                    metric = total_headers
-                elif "escanteio" in desc or "corner" in desc:
-                    metric = total_corners
-                elif "primeiro tempo" in desc or "1º tempo" in desc:
-                    metric = total_first_half_goals
-                else:
-                    metric = total_goals
-                    
-                if "+" in desc or "mais de" in desc or "over" in desc:
-                    odd.is_winner = metric > val
-                elif "-" in desc or "menos de" in desc or "under" in desc:
-                    odd.is_winner = metric <= val
-                    
+        odd.is_winner = evaluate_odd_logic(odd.description, metrics)
         print(f"    Resultado definido para '{odd.description}': {odd.is_winner}")
-    # ==========================================================
 
     db.session.commit()
-    
-    # 🔥 Gatilho de checagem imediata para pagar bilhetes ao vivo
     check_and_settle_live_bets(game)
     
     flash(f'Placar de "{game.title}" modificado para {game.home_score}x{game.away_score}!')
@@ -734,7 +682,6 @@ def create_game():
         home_logo = logos_database.get(home_team.lower(), "/static/img/default.png")
         away_logo = logos_database.get(away_team.lower(), "/static/img/default.png")
         
-        # CRIAR O JOGO (Sem a linha initial_odds)
         novo_jogo = Game(
             title=title_input,
             home_team=home_team,
@@ -747,7 +694,6 @@ def create_game():
         db.session.add(novo_jogo)
         db.session.commit()
         
-        # LOOP AUTOMÁTICO: Usa o multiplicador enviado pelo Admin do painel
         for opcao in OPCOES_PADRAO:
             nova_odd = Odd(game_id=novo_jogo.id, description=opcao, multiplier=initial_multiplier)
             db.session.add(nova_odd)
@@ -807,82 +753,25 @@ def settle_game(game_id):
     if not game:
         return "Jogo não encontrado", 404
 
-    # 1. Trava de segurança: impede processar antes do fim do jogo
     if game.period != "Fim de Jogo":
         flash(f"Atenção: O jogo '{game.title}' está no período '{game.period}'. Mude para 'Fim de Jogo' antes de liquidar!", "danger")
         return redirect(url_for('admin_dashboard'))
     
-    # Se o jogo já estiver finalizado, evitamos reprocessamento
     if game.status == 'Finalizado':
         flash("Este jogo já foi liquidado anteriormente.", "warning")
         return redirect(url_for('admin_dashboard'))
-        
-    # Inicializa variáveis de placar
-    home = game.home_score or 0
-    away = game.away_score or 0
-    total_goals = home + away
-    total_cards = (game.home_cards or 0) + (game.away_cards or 0)
-    total_headers = (game.home_headers or 0) + (game.away_headers or 0)
-    total_corners = (game.home_corners or 0) + (game.away_corners or 0)
-    total_bicycle = (game.home_bicycle_goals or 0) + (game.away_bicycle_goals or 0)
-    total_penalties_scored = (game.home_penalties_scored or 0) + (game.away_penalties_scored or 0)
-    total_penalties_missed = (game.home_penalties_missed or 0) + (game.away_penalties_missed or 0)
-    total_first_half_goals = (game.home_first_half_goals or 0) + (game.away_first_half_goals or 0)
 
-    # 2. STEP 1: Calcula vencedores das odds deste jogo específico
+    metrics = get_game_metrics(game)
     for odd in game.odds:
-        desc = odd.description.lower().strip()
-        
-        if "casa vence" in desc:
-            odd.is_winner = home > away
-        elif "fora vence" in desc:
-            odd.is_winner = away > home
-        elif "empate" in desc:
-            odd.is_winner = home == away
-        elif "sem gols" in desc:
-            odd.is_winner = total_goals == 0
-        elif "sem gol primeiro tempo" in desc:
-            odd.is_winner = total_first_half_goals == 0
-        elif "gol de bicicleta" in desc:
-            odd.is_winner = total_bicycle > 0
-        elif "gol de penalti" in desc or "gol de pênalti" in desc:
-            odd.is_winner = total_penalties_scored > 0
-        elif "penalti perdido" in desc or "pênalti perdido" in desc:
-            odd.is_winner = total_penalties_missed > 0
-        elif "gol de cabeça" in desc and not any(x in desc for x in ["+", "-", "mais de", "menos de"]):
-            odd.is_winner = total_headers > 0
-        elif "gol no primeiro tempo" in desc and not any(x in desc for x in ["+", "-", "mais de", "menos de"]):
-            odd.is_winner = total_first_half_goals > 0
-        else:
-            nums = re.findall(r'\d+(?:\.\d+)?', desc)
-            if nums:
-                val = float(nums[0])
-                if "cart" in desc or "card" in desc:
-                    metric = total_cards
-                elif "cabeç" in desc or "header" in desc:
-                    metric = total_headers
-                elif "escanteio" in desc or "corner" in desc:
-                    metric = total_corners
-                elif "primeiro tempo" in desc or "1º tempo" in desc:
-                    metric = total_first_half_goals
-                else:
-                    metric = total_goals
-                    
-                if "+" in desc or "mais de" in desc or "over" in desc:
-                    odd.is_winner = metric > val
-                elif "-" in desc or "menos de" in desc or "under" in desc:
-                    odd.is_winner = metric <= val
+        odd.is_winner = evaluate_odd_logic(odd.description, metrics)
 
     game.status = 'Finalizado'
     
-    # 3. STEP 2: Validação dos bilhetes com Transação Única
-    # Usamos try/except para garantir que se algo falhar, o jogo não fique "meio liquidado"
     try:
         pending_bets = Bet.query.filter_by(status='Pendente').all()
         
         for bet in pending_bets:
             if any(odd.game_id == game.id for odd in bet.odds):
-                # Verifica se TODOS os jogos deste bilhete já chegaram em 'Finalizado'
                 if all(o.game.status == 'Finalizado' for o in bet.odds):
                     ticket_won = all(odd.is_winner for odd in bet.odds)
                     
@@ -896,12 +785,11 @@ def settle_game(game_id):
                     else:
                         bet.status = 'Perdeu'
         
-        # COMMIT ÚNICO: Salva todas as alterações (odds, status do jogo e saldos) de uma vez
         db.session.commit()
         flash(f"O confronto '{game.title}' foi finalizado e todos os bilhetes processados.", "success")
         
     except Exception as e:
-        db.session.rollback() # Se der erro, desfaz tudo para não corromper o saldo
+        db.session.rollback()
         flash(f"Erro ao processar liquidação: {str(e)}", "danger")
         
     return redirect(url_for('admin_dashboard'))
@@ -922,16 +810,13 @@ def approve_transaction(tx_id):
         flash("Esta transação já foi processada.")
         return redirect(url_for('admin_dashboard'))
 
-    # Normalizamos o tipo para garantir a comparação
     tipo = str(tx.type).strip().capitalize()
 
-    # Lógica de Depósito
     if tipo == 'Deposito':
         tx.user.balance += tx.amount
         tx.status = 'Aprovado'
         flash(f"Depósito de R$ {tx.amount:.2f} aprovado com sucesso!")
             
-    # Lógica de Saque
     elif tipo == 'Saque':
         if tx.user.balance >= tx.amount:
             tx.user.balance -= tx.amount
@@ -973,7 +858,6 @@ def toggle_odd_winner(odd_id):
     
     return jsonify({'success': True, 'is_winner': odd.is_winner})
 
-# --- NOVA ROTA ADMINISTRATIVA PARA CONTROLE DO CRONÔMETRO ---
 @app.route('/admin/control_timer/<int:game_id>/<string:action>', methods=['POST'])
 @login_required
 def control_timer(game_id, action):
