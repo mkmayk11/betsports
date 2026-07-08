@@ -5,18 +5,23 @@ from flask import Flask, render_template, redirect, url_for, request, flash, jso
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_migrate import Migrate
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecreto123'
 
+# 2. Configuração do Banco
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['GLOBAL_AUTO_REFRESH'] = False
 
+# 3. Instanciar Extensões (apenas uma vez)
 db = SQLAlchemy(app)
+migrate = Migrate(app, db) # Agora o comando 'db' vai funcionar!
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -165,6 +170,15 @@ class Game(db.Model):
             elapsed = (now - start).total_seconds()
             total_seconds = self.saved_seconds + int(elapsed)
         return total_seconds // 60, total_seconds % 60
+    
+    def get_progress_percentage(self):
+        # Chama a sua lógica existente para pegar os segundos totais
+        minutes, _ = self.get_current_time()
+        
+        # Calcula a porcentagem baseada em 90 minutos
+        # Limitamos a 100 para a barra não passar do final
+        percent = (minutes / 90.0) * 100
+        return min(max(percent, 0), 100)
 
 class Odd(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -188,6 +202,7 @@ class Bet(db.Model):
     status = db.Column(db.String(50), default='Pendente')
     manual_cashout_value = db.Column(db.Float, nullable=True, default=None)
     odds = db.relationship('Odd', secondary=bet_odds, backref=db.backref('bets', lazy=True))
+    cashout_amount = db.Column(db.Float, default=0.0)
 
     def calculate_live_cashout(self):
         if self.manual_cashout_value is not None:
@@ -245,12 +260,15 @@ class Bet(db.Model):
                     elif saldo == 1:
                         peso_base = odd.multiplier * 0.85 
                     elif saldo == 0:
-                        peso_base = odd.multiplier * 0.30 
+                        # MELHORIA: Aumentado de 0.30 para 0.45 para não zerar fácil
+                        peso_base = odd.multiplier * 0.45 
                     elif saldo == -1:
-                        peso_base = odd.multiplier * 0.10 
+                        # MELHORIA: Aumentado de 0.10 para 0.25
+                        peso_base = odd.multiplier * 0.25 
                     else:
-                        peso_base = odd.multiplier * 0.02 
-                        
+                        # MELHORIA: Aumentado de 0.02 para 0.15 (Piso de segurança)
+                        peso_base = odd.multiplier * 0.15 
+                            
                 # --- LÓGICA PARA EMPATE ---
                 elif "empate" in desc:
                     saldo = abs(metrics['home'] - metrics['away'])
@@ -259,7 +277,8 @@ class Bet(db.Model):
                     elif saldo == 1:
                         peso_base = odd.multiplier * 0.20 
                     else:
-                        peso_base = odd.multiplier * 0.02
+                        # MELHORIA: Aumentado de 0.02 para 0.10
+                        peso_base = odd.multiplier * 0.10
                         
                 # --- MANTÉM AS DEMAIS REGRAS ORIGINAIS ---
                 elif "gol de cabeça" in desc and not any(x in desc for x in ["+", "-", "mais", "menos"]):
@@ -267,7 +286,7 @@ class Bet(db.Model):
                 elif "ambos marcam - sim" in desc:
                     peso_base = odd.multiplier if (metrics['home'] > 0 and metrics['away'] > 0) else 0.4
                 elif "ambos marcam - nao" in desc or "ambos marcam - não" in desc:
-                    peso_base = odd.multiplier if (metrics['home'] == 0 or metrics['away'] == 0) else 0.0
+                    peso_base = odd.multiplier if (metrics['home'] == 0 or metrics['away'] == 0) else 0.05
                 elif "expulsões" in desc or "expulsao" in desc:
                     peso_base = odd.multiplier if metrics['total_expulsions'] > 0 else 0.3
                 else:
@@ -277,15 +296,14 @@ class Bet(db.Model):
                     if "+" in desc or "mais de" in desc or "over" in desc:
                         peso_base = odd.multiplier if current > target else (1.0 * (current / (target + 1)))
                     else: 
-                        peso_base = odd.multiplier if current <= target else 0.0
+                        peso_base = odd.multiplier if current <= target else 0.05
 
                 # 3. A MÁGICA: O TEMPO É AMIGO OU INIMIGO?
                 if is_hitting:
-                    # Tempo a favor: Aposta está batendo. O multiplicador sobe de 70% para quase 100% no fim do jogo.
                     fator_tempo = 0.70 + (proporcao_tempo * 0.30) 
                 else:
-                    # Tempo contra: Aposta está perdendo. O multiplicador começa normal e vai CAINDO PARA ZERO no fim do jogo.
-                    fator_tempo = 1.0 - proporcao_tempo
+                    # MELHORIA: Reduzido o impacto da punição do tempo
+                    fator_tempo = max(0.20, 1.0 - proporcao_tempo)
                     
                 peso_final = peso_base * fator_tempo
                 pesos_individuais.append(peso_final)
@@ -293,8 +311,8 @@ class Bet(db.Model):
         # Tira a média dos pesos de todos os jogos do bilhete
         total_weight = sum(pesos_individuais) / jogos_no_bilhete
         
-        # Piso de 10% de recuperação (para ele não perder tudo antes do juiz apitar)
-        cashout_value = max(self.amount * 0.1, self.amount * total_weight)
+        # MELHORIA: Piso de recuperação elevado de 10% para 20%
+        cashout_value = max(self.amount * 0.20, self.amount * total_weight)
         
         # Teto de segurança (A casa nunca paga mais que 95% do prêmio potencial no cashout antecipado)
         return round(min(cashout_value, self.potential_win * 0.95), 2)
@@ -453,14 +471,35 @@ def dashboard():
         flash('Bilhete registrado com sucesso!')
         return redirect(url_for('bet_history'))
 
+    # ... (mantenha a lógica de POST do dashboard intacta) ...
+
     games = Game.query.filter(Game.status != 'Finalizado').all()
     
-    # Renderização empacotada com verificador de nome para auto-refresh
-    response = make_response(render_template('dashboard.html', games=games))
-    if current_user.username == 'pol':
-        response.headers['Refresh'] = '10'
+    # Busca as apostas pendentes do usuário atual para exibir no checklist
+    pending_bets = Bet.query.filter_by(user_id=current_user.id, status='Pendente').order_by(Bet.id.desc()).all()
+    
+    # Renderização empacotada passando também as pending_bets
+    response = make_response(render_template('dashboard.html', games=games, pending_bets=pending_bets))
+    
+    # Nova lógica do Auto-Refresh Global (15 segundos)
+    if app.config.get('GLOBAL_AUTO_REFRESH', False):
+        response.headers['Refresh'] = '15'
         
     return response
+
+@app.route('/admin/toggle_refresh', methods=['POST'])
+@login_required
+def toggle_refresh():
+    if not current_user.is_admin:
+        return redirect(url_for('dashboard'))
+    
+    # Inverte o estado atual (Se for False vira True, e vice-versa)
+    app.config['GLOBAL_AUTO_REFRESH'] = not app.config.get('GLOBAL_AUTO_REFRESH', False)
+    
+    estado = "ATIVADO" if app.config['GLOBAL_AUTO_REFRESH'] else "DESATIVADO"
+    flash(f'Auto-Refresh Global {estado}!')
+    
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/bet_history')
 @login_required
@@ -468,6 +507,29 @@ def bet_history():
     bets = Bet.query.filter_by(user_id=current_user.id).order_by(Bet.id.desc()).all()
     return render_template('bet_history.html', bets=bets)
 
+
+    #rota de api 877777777777777777777777777777777777777777777777777777777777777777777776
+
+# 1. ROTA DE API (Para o seu JS no dashboard)
+@app.route('/api/get_live_cashouts')
+@login_required
+def get_live_cashouts():
+    bets = Bet.query.filter_by(user_id=current_user.id, status='Pendente').all()
+    # Retorna o valor atualizado para cada aposta pendente
+    return jsonify({b.id: b.calculate_live_cashout() for b in bets})
+
+# 2. LÓGICA DE FINALIZAÇÃO (Para o Histórico)
+def verificar_resultado_aposta(bet):
+    for odd in bet.odds:
+        game = odd.game
+        # Aqui entra sua regra: se o resultado do jogo não bater com a odd, aposta perdida
+        if not game.is_winner(odd): 
+            bet.status = 'Perdida'
+            return False
+    bet.status = 'Ganha'
+    return True
+
+# 2. ROTA DE CASHOUT (Ajustada para salvar o valor histórico)
 @app.route('/bet/cashout/<int:bet_id>', methods=['POST'])
 @login_required
 def cashout(bet_id):
@@ -486,6 +548,8 @@ def cashout(bet_id):
 
     try:
         bet.status = 'Cashout'
+        bet.cashout_amount = float(valor_final) # <--- SALVA O VALOR NO HISTÓRICO
+        
         if hasattr(current_user, 'saldo'):
             current_user.saldo += float(valor_final)
         else:
@@ -528,8 +592,15 @@ def admin_dashboard():
                 "real madrid": "https://upload.wikimedia.org/wikipedia/ar/thumb/5/56/Real_Madrid_CF.svg/330px-Real_Madrid_CF.svg.png",
                 "brasil":"https://logodetimes.com/times/selecao-brasileira-brasil-novo-logo-2019/logo-selecao-brasileira-brasil-novo-logo-2019-4096.png",
                 "argentina":"https://logodetimes.com/times/argentina/selecao-argentina-de-futebol-4096.png",
-                "frança":"https://logodetimes.com/times/franca/selecao-francesa-de-futebol-2048.png",
-                "alemanha":"https://logodetimes.com/times/alemanha/selecao-alema-de-futebol-2048.png"
+                "frança":"https://logodownload.org/wp-content/uploads/2023/06/bandeira-france-flag-0.png",
+                "alemanha":"https://logodetimes.com/times/alemanha/selecao-alema-de-futebol-2048.png",
+                "marrocos":"https://www.wikisporting.com/images/f/f8/Marrocos.png",
+                "espanha":"https://logodownload.org/wp-content/uploads/2023/06/bandeira-espanha-flag.png",
+                "belgica":"https://logodownload.org/wp-content/uploads/2023/08/bandeira-belgium-flag-2.png",
+                "noruega":"https://images.emojiterra.com/twitter/v14.0/1024px/1f1f3-1f1f4.png",
+                "inglaterra":"https://logodownload.org/wp-content/uploads/2023/07/bandeira-england-flag.png",
+                "argentina":"https://upload.wikimedia.org/wikipedia/commons/8/8f/Flag_of_Argentina.png",
+                "suiça":"https://e7.pngegg.com/pngimages/611/733/png-clipart-computer-icons-switzerland-swiss-flag-rectangle-switzerland.png"
             }
             
             home_logo = logos_database.get(home_team.lower(), "/static/img/default.png")
@@ -675,8 +746,15 @@ def create_game():
                 "real madrid": "https://upload.wikimedia.org/wikipedia/ar/thumb/5/56/Real_Madrid_CF.svg/330px-Real_Madrid_CF.svg.png",
                 "brasil":"https://logodetimes.com/times/selecao-brasileira-brasil-novo-logo-2019/logo-selecao-brasileira-brasil-novo-logo-2019-4096.png",
                 "argentina":"https://logodetimes.com/times/argentina/selecao-argentina-de-futebol-4096.png",
-                "frança":"https://logodetimes.com/times/franca/selecao-francesa-de-futebol-2048.png",
-                "alemanha":"https://logodetimes.com/times/alemanha/selecao-alema-de-futebol-2048.png"
+                "frança":"https://logodownload.org/wp-content/uploads/2023/06/bandeira-france-flag-0.png",
+                "alemanha":"https://logodetimes.com/times/alemanha/selecao-alema-de-futebol-2048.png",
+                "marrocos":"https://www.wikisporting.com/images/f/f8/Marrocos.png",
+                "espanha":"https://logodownload.org/wp-content/uploads/2023/06/bandeira-espanha-flag.png",
+                "belgica":"https://logodownload.org/wp-content/uploads/2023/08/bandeira-belgium-flag-2.png",
+                "noruega":"https://images.emojiterra.com/twitter/v14.0/1024px/1f1f3-1f1f4.png",
+                "inglaterra":"https://logodownload.org/wp-content/uploads/2023/07/bandeira-england-flag.png",
+                "argentina":"https://upload.wikimedia.org/wikipedia/commons/8/8f/Flag_of_Argentina.png",
+                "suiça":"https://e7.pngegg.com/pngimages/611/733/png-clipart-computer-icons-switzerland-swiss-flag-rectangle-switzerland.png"
         }
         
         home_logo = logos_database.get(home_team.lower(), "/static/img/default.png")
