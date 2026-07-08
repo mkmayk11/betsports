@@ -11,7 +11,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecreto123'
 
 # 2. Configuração do Banco
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///betsports.db')
+db_url = os.environ.get('DATABASE_URL', 'postgresql://neondb_owner:npg_meVRBsiA3D2U@ep-gentle-salad-adp0i6vu-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require')
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
