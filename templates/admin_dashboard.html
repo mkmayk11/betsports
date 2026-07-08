@@ -21,6 +21,24 @@
         {% endif %}
     {% endwith %}
 
+    <div class="mb-4 p-3 border rounded bg-light text-dark text-center" style="max-width: 600px; margin: 0 auto 20px auto;">
+    <h5>Controle do Sistema</h5>
+    <p>A atualização automática de tela a cada 15s para todos os usuários está: 
+        <strong>{{ 'ATIVA' if config['GLOBAL_AUTO_REFRESH'] else 'DESATIVADA' }}</strong>
+    </p>
+    <form action="{{ url_for('toggle_refresh') }}" method="POST">
+        {% if config['GLOBAL_AUTO_REFRESH'] %}
+            <button type="submit" class="btn btn-danger font-weight-bold" style="cursor: pointer;">
+                Desativar Auto-Refresh (15s)
+            </button>
+        {% else %}
+            <button type="submit" class="btn btn-success font-weight-bold" style="cursor: pointer;">
+                Ativar Auto-Refresh (15s)
+            </button>
+        {% endif %}
+    </form>
+</div>
+
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 35px;">
         
         <div style="background: #1a2c3f; padding: 20px; border-radius: 6px; border: 1px solid #243b53;">
