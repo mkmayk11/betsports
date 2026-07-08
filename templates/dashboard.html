@@ -42,8 +42,12 @@
             <div style="background: #152434; border-radius: 8px; margin-bottom: 25px; overflow: hidden; border: 1px solid #203347; position: relative;">
                 
                 {% if game.status == 'Ao Vivo' %}
-                <div style="width: 100%; background: #203347; height: 4px; position: absolute; top: 0; left: 0; z-index: 10;">
-                    <div class="live-progress-bar" style="height: 100%; background: #00ff66; width: 0%;"></div>
+                <div class="live-progress-bar-container">
+                    <div id="progress-bar-fill" 
+                        class="live-progress-bar" 
+                        style="width: {{ game.get_progress_percentage() }}%;"
+                        data-start-percent="{{ game.get_progress_percentage() }}">
+                    </div>
                 </div>
                 {% endif %}
 
@@ -196,6 +200,57 @@
                 <button type="submit" style="width: 100%; background: #00ff66; color: #0b141c; border: none; padding: 12px; font-weight: bold; font-size: 1em; border-radius: 4px; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">CRAVAR BILHETE</button>
             </div>
         </form>
+
+        <div style="margin-top: 25px; padding: 15px; background: #0f1923; border: 1px solid #203347; border-radius: 8px;">
+            <h5 style="color: white; margin-top: 0; margin-bottom: 15px; font-weight: bold; font-size: 0.95em; text-align: center; text-transform: uppercase; letter-spacing: 0.5px;">Minhas Apostas Ativas</h5>
+            
+            {% if pending_bets %}
+                {% for bet in pending_bets %}
+                    <div style="background: #152434; border: 1px solid #203347; border-radius: 6px; margin-bottom: 15px; overflow: hidden;">
+                        <div style="background: #1c2e42; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #203347;">
+                            <strong style="color: white; font-size: 0.85em;">Bilhete #{{ bet.id }}</strong>
+                            <span style="color: #00ff66; font-weight: bold; font-size: 0.85em;">Retorno: R$ {{ "%.2f"|format(bet.potential_win) }}</span>
+                        </div>
+                        
+                        <div style="display: flex; flex-direction: column;">
+                            {% for odd in bet.odds %}
+                                <div style="padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #203347; font-size: 0.8em; color: #cbd5e1;">
+                                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                                        <span style="color: #8fa3b7; font-size: 0.9em;">{{ odd.game.title }}</span>
+                                        <span style="color: white; font-weight: bold;">{{ odd.description }}</span>
+                                    </div>
+                                    
+                                    {% if odd.game.status == 'Finalizado' %}
+                                        {% if odd.is_winner %}
+                                            <span style="font-size: 1.1em;" title="Aposta concluída com vitória">✅</span>
+                                        {% else %}
+                                            <span style="font-size: 1.1em;" title="Aposta perdida">❌</span>
+                                        {% endif %}
+                                    {% else %}
+                                        {% if odd.is_currently_hitting() %}
+                                            <span style="font-size: 1.1em;" title="Batendo no momento">✅</span>
+                                        {% else %}
+                                            <span style="font-size: 1.1em;" title="Pendente / Não batendo">⏳</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div style="padding: 10px; background: #0b141c; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #203347;">
+                            <div style="font-size: 0.75em; color: #00ff66;">
+                                Cash Out: <strong style="color: #f47321;" id="cashout-{{ bet.id }}">R$ {{ "%.2f"|format(bet.calculate_live_cashout()) }}</strong>
+                            </div>
+                            <form action="{{ url_for('cashout', bet_id=bet.id) }}" method="POST">
+                                <button type="submit" style="background: #f47321; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.75em; cursor: pointer;">SACAR</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p style="text-align: center; color: #8fa3b7; font-size: 0.85em; margin: 10px 0;">Você não tem apostas pendentes.</p>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -217,8 +272,9 @@
         50% { opacity: 0.5; }
         100% { opacity: 1; }
     }
-    @keyframes moveProgress { 0% { width: 0%; } 50% { width: 55%; } 100% { width: 98%; } }
-    .live-progress-bar { animation: moveProgress 120s linear infinite; }
+    /* BARRA CORRIGIDA: Sem animação, apenas design */
+    .live-progress-bar-container { width: 100%; background: #203144; height: 6px; border-radius: 3px; overflow: hidden; }
+    .live-progress-bar { height: 100%; background: #00ff88; transition: width 1s linear; }
     .coupon-card { background: #0f1923; padding: 10px; border-radius: 4px; position: relative; border-left: 3px solid #f47321; }
 </style>
 
@@ -299,5 +355,34 @@
         const m = parseFloat(document.getElementById('total-factor').getAttribute('data-m')) || 1.0;
         document.getElementById('view-profit').innerText = wager > 0 && Object.keys(currentSlip).length > 0 ? 'R$ ' + (wager * m).toFixed(2) : 'R$ 0,00';
     }
+
+// Atualiza os valores de Cash Out a cada 5 segundos
+setInterval(() => {
+    fetch('/api/get_live_cashouts') // Certifique-se de criar esta rota no seu Python
+        .then(response => response.json())
+        .then(data => {
+            for (const [betId, newValue] of Object.entries(data)) {
+                const element = document.getElementById('cashout-' + betId);
+                if (element) {
+                    element.innerText = 'R$ ' + newValue;
+                }
+            }
+        })
+        .catch(error => console.error('Erro ao atualizar cashout:', error));
+}, 5000);
+
+setInterval(() => {
+        const bar = document.getElementById('progress-bar-fill');
+        if (bar) {
+            let currentWidth = parseFloat(bar.style.width);
+            // Incrementa um pouquinho (0.018% a cada segundo dá 100% em 90 minutos)
+            // 100% / 5400 segundos (90 min) = 0.0185
+            let newWidth = currentWidth + 0.0185;
+            
+            if (newWidth <= 100) {
+                bar.style.width = newWidth + '%';
+            }
+        }
+    }, 1000);
 </script>
 {% endblock %}
