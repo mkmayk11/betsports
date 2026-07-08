@@ -20,10 +20,25 @@
         {% for bet in bets %}
         <div style="background: #1a2c3f; border: 1px solid #243b53; border-radius: 6px; padding: 20px;">
             
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #203144; padding-bottom: 12px; margin-bottom: 15px;">
-                <div>
-                    <span style="font-size: 0.85em; color: #8fa3b7;">Identificador do Bilhete:</span>
-                    <strong style="color: #cbd5e1; font-size: 1.1em;">#{{ bet.id }}</strong>
+            <div style="display: flex; flex-direction: column;">
+                    <div>
+                        <span style="font-size: 0.85em; color: #8fa3b7;">Identificador do Bilhete:</span>
+                        <strong style="color: #cbd5e1; font-size: 1.1em;">#{{ bet.id }}</strong>
+                        
+                        {% if bet.status == 'Ganhou' %}
+                            <span style="margin-left: 8px;">✅</span>
+                        {% elif bet.status == 'Perdeu' %}
+                            <span style="margin-left: 8px;">❌</span>
+                        {% elif bet.status == 'Cashout' %}
+                            <span style="margin-left: 8px;">💰</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if bet.status == 'Cashout' %}
+                        <div style="font-size: 0.8em; color: #ff9045; margin-top: 5px;">
+                            Sacado: R$ {{ "%.2f"|format(bet.cashout_amount or 0) }}
+                        </div>
+                    {% endif %}
                 </div>
                 <div>
                     <span style="padding: 4px 10px; border-radius: 4px; font-size: 0.85em; font-weight: bold;
