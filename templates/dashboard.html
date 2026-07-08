@@ -43,10 +43,9 @@
                 
                 {% if game.status == 'Ao Vivo' %}
                 <div class="live-progress-bar-container">
-                    <div id="progress-bar-fill" 
-                        class="live-progress-bar" 
-                        style="width: {{ game.get_progress_percentage() }}%;"
-                        data-start-percent="{{ game.get_progress_percentage() }}">
+                    <div class="progress-bar-fill" 
+                        data-game-id="{{ game.id }}"
+                        style="width: {{ game.get_progress_percentage() }}%; height: 100%; background: #00ff88; transition: width 1s linear;">
                     </div>
                 </div>
                 {% endif %}
@@ -372,17 +371,19 @@ setInterval(() => {
 }, 5000);
 
 setInterval(() => {
-        const bar = document.getElementById('progress-bar-fill');
-        if (bar) {
+        // Seleciona TODAS as barras da página
+        const bars = document.querySelectorAll('.progress-bar-fill');
+        
+        bars.forEach(bar => {
             let currentWidth = parseFloat(bar.style.width);
-            // Incrementa um pouquinho (0.018% a cada segundo dá 100% em 90 minutos)
-            // 100% / 5400 segundos (90 min) = 0.0185
-            let newWidth = currentWidth + 0.0185;
+            
+            // Incremento fixo para todas
+            let newWidth = currentWidth + 0.0185; 
             
             if (newWidth <= 100) {
                 bar.style.width = newWidth + '%';
             }
-        }
+        });
     }, 1000);
 </script>
 {% endblock %}
