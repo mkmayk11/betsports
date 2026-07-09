@@ -115,7 +115,7 @@
         <h2>Betsports</h2>
         <div>
             {% if current_user.is_authenticated %}
-                <span>Saldo: R$ {{ "%.2f"|format(current_user.balance) }}</span>
+                <span>Saldo: R$ {{ "{:,.2f}".format(current_user.balance).replace(",", "X").replace(".", ",").replace("X", ".") }}</span>
                 {% if current_user.is_admin %}
                     <a href="{{ url_for('admin_dashboard') }}">Painel Admin</a>
                 {% else %}
