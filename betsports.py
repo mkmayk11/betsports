@@ -936,6 +936,11 @@ def toggle_odd_winner(odd_id):
     
     return jsonify({'success': True, 'is_winner': odd.is_winner})
 
+@app.template_filter('brl')
+def brl_filter(valor):
+    if valor is None: return "0,00"
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 @app.route('/admin/control_timer/<int:game_id>/<string:action>', methods=['POST'])
 @login_required
 def control_timer(game_id, action):
