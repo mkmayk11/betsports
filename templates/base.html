@@ -5,21 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Betsports</title>
     <style>
+        /* Estilos originais e novas regras de segurança */
         :root {
-            --primary-orange: #FF6B00;
-            --secondary-orange: #FF8533;
-            --pure-white: #FFFFFF;
-            --bg-color: #F4F4F9;
-            --text-dark: #333333;
-            --border-color: #E0E0E0;
+            --primary-orange: #FF6B00; --secondary-orange: #FF8533;
+            --pure-white: #FFFFFF; --bg-color: #F4F4F9;
+            --text-dark: #333333; --border-color: #E0E0E0;
         }
         
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-dark);
-            margin: 0;
-            padding: 0;
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-dark); margin: 0; padding: 0; }
+
+        /* A MÁGICA: Regra Global de Segurança */
+        * {
+            max-width: 100vw !important; /* Nada pode ser maior que a tela do celular */
+            box-sizing: border-box !important;
         }
 
         .header {
@@ -40,9 +38,11 @@
         }
 
         .container {
+            width: 100% !important;
             max-width: 1200px;
             margin: 30px auto;
             padding: 0 20px;
+            box-sizing: border-box;
         }
 
         .card {
@@ -108,46 +108,50 @@
             border-left: 4px solid var(--primary-orange);
         }
 
-    @media (max-width: 768px) {
-        /* 1. Faz o container ocupar 100% da largura no celular */
-        .container {
-            width: 95% !important;
-            margin: 10px auto !important;
-        }
+        /* Responsividade Automática */
+        @media (max-width: 768px) {
+            .container {
+                width: 95% !important;
+                margin: 10px auto !important;
+            }
 
-        /* 2. Faz as tabelas rolarem horizontalmente em vez de quebrar o layout */
-        table {
-            display: block;
-            overflow-x: auto;
-            white-space: nowrap;
-        }
+            .header {
+                flex-direction: column;
+                text-align: center;
+                padding: 10px;
+            }
 
-        /* 3. Ajusta o header para não ficar apertado */
-        .header {
-            flex-direction: column;
-            text-align: center;
-            padding: 10px;
-        }
+            .header-nav {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+                margin-top: 10px;
+            }
 
-        .header-nav {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
-        }
+            .header-nav a {
+                margin-left: 5px !important;
+                font-size: 0.85em;
+            }
 
-        .header-nav a {
-            margin-left: 5px !important;
-            font-size: 0.85em;
-        }
+            /* FORÇA QUALQUER ELEMENTO COM LARGURA FIXA A ENCOLHER */
+            [style*="width:"] {
+                width: 100% !important;
+                min-width: 100% !important;
+                max-width: 100% !important;
+            }
 
-        /* 4. Aumenta os botões para serem clicáveis com o polegar */
-        .btn-orange {
-            width: 100%;
-            margin-bottom: 10px;
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .btn-orange {
+                width: 100%;
+                margin-bottom: 10px;
+            }
         }
-    }
     </style>
 </head>
 <body>
