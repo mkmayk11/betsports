@@ -35,6 +35,7 @@
             <button type="submit" class="btn btn-success font-weight-bold" style="cursor: pointer;">
                 Ativar Auto-Refresh (15s)
             </button>
+            
         {% endif %}
     </form>
 </div>
@@ -356,6 +357,11 @@
         </table>
     </div>
 </div>
+<button id="btnAutoRefresh" 
+    onclick="toggleAutoRefresh()" 
+    style="position: fixed; bottom: 20px; right: 20px; padding: 15px 25px; border-radius: 50px; border: none; cursor: pointer; font-weight: bold; z-index: 9999; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+    🔄 Auto-Refresh: DESATIVADO
+</button>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -407,6 +413,59 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Seu código das odds (mantido igual)
+    const buttons = document.querySelectorAll('.toggle-odd-btn');
+    buttons.forEach(button => {
+        button.addEventListener('click', function() {
+            const oddId = this.getAttribute('data-odd-id');
+            const targetUrl = `/admin/toggle_odd_winner/${oddId}`;
+            const hiddenInput = document.getElementById(`input-winner-${oddId}`);
+            
+            fetch(targetUrl, { method: 'POST', headers: {'Content-Type': 'application/json'} })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    hiddenInput.value = data.is_winner;
+                    this.style.background = data.is_winner ? "#28a745" : "#1a2c3f";
+                }
+            });
+        });
+    });
+
+    // 2. Lógica do Auto-Refresh persistente
+    const btn = document.getElementById('btnAutoRefresh');
+    let refreshInterval = null;
+
+    function iniciarRefresh() {
+        refreshInterval = setInterval(() => { window.location.reload(); }, 20000);
+        btn.innerText = "⏸️ Auto-Refresh: ATIVO";
+        btn.style.background = "#28a745";
+        localStorage.setItem('autoRefreshAtivo', 'true'); // Salva o estado
+    }
+
+    function pararRefresh() {
+        clearInterval(refreshInterval);
+        btn.innerText = "🔄 Auto-Refresh: DESATIVADO";
+        btn.style.background = "#dc3545";
+        localStorage.setItem('autoRefreshAtivo', 'false'); // Salva o estado
+    }
+
+    // Ao clicar no botão
+    btn.addEventListener('click', function() {
+        if (localStorage.getItem('autoRefreshAtivo') === 'true') {
+            pararRefresh();
+        } else {
+            iniciarRefresh();
+        }
+    });
+
+    // 3. Ao carregar a página, verifica se estava ligado
+    if (localStorage.getItem('autoRefreshAtivo') === 'true') {
+        iniciarRefresh();
+    }
 });
 </script>
 {% endblock %}
