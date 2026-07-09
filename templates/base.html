@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Betsports</title>
+    <title>Betsports</title> 
     <style>
         :root {
             --primary-orange: #FF6B00;
@@ -108,49 +108,44 @@
             border-left: 4px solid var(--primary-orange);
         }
 
-    @media (max-width: 768px) {
-        /* 1. Faz o container ocupar 100% da largura no celular */
-        .container {
-            width: 95% !important;
-            margin: 10px auto !important;
+        /* RESPONSIVIDADE CORRIGIDA E SEGURA */
+        @media (max-width: 768px) {
+            .container {
+                width: 95% !important;
+                margin: 10px auto !important;
+                padding: 0 10px !important;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .header {
+                flex-direction: column;
+                text-align: center;
+                padding: 10px;
+            }
+
+            .header-nav {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+                margin-top: 10px;
+            }
+
+            .header-nav a {
+                margin-left: 5px !important;
+                font-size: 0.85em;
+            }
+
+            .btn-orange {
+                width: 100%;
+                margin-bottom: 10px;
+            }
         }
-
-        /* 2. Faz as tabelas rolarem horizontalmente em vez de quebrar o layout */
-        table {
-            display: block;
-            overflow-x: auto;
-            white-space: nowrap;
-        }
-
-        /* 3. Ajusta o header para não ficar apertado */
-        .header {
-            flex-direction: column;
-            text-align: center;
-            padding: 10px;
-        }
-
-        .header-nav {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .header-nav a {
-            margin-left: 5px !important;
-            font-size: 0.85em;
-        }
-
-        /* 4. Aumenta os botões para serem clicáveis com o polegar */
-        .btn-orange {
-            width: 100%;
-            margin-bottom: 10px;
-        }
-    }
-
-    
-
     </style>
 </head>
 <body>
